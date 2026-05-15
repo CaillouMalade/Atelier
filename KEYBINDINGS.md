@@ -1,6 +1,6 @@
 # Keybindings
 
-T3 Code reads keybindings from:
+Atelier reads keybindings from:
 
 - `~/.t3/keybindings.json`
 
@@ -23,11 +23,34 @@ See the full schema for more details: [`packages/contracts/src/keybindings.ts`](
   { "key": "mod+d", "command": "terminal.split", "when": "terminalFocus" },
   { "key": "mod+n", "command": "terminal.new", "when": "terminalFocus" },
   { "key": "mod+w", "command": "terminal.close", "when": "terminalFocus" },
+  { "key": "mod+b", "command": "sidebar.left.toggle", "when": "!terminalFocus" },
+  { "key": "mod+d", "command": "diff.toggle", "when": "!terminalFocus" },
   { "key": "mod+k", "command": "commandPalette.toggle", "when": "!terminalFocus" },
   { "key": "mod+n", "command": "chat.new", "when": "!terminalFocus" },
   { "key": "mod+shift+o", "command": "chat.new", "when": "!terminalFocus" },
   { "key": "mod+shift+n", "command": "chat.newLocal", "when": "!terminalFocus" },
-  { "key": "mod+o", "command": "editor.openFavorite" }
+  { "key": "mod+shift+m", "command": "modelPicker.toggle", "when": "!terminalFocus" },
+  { "key": "mod+o", "command": "editor.openFavorite" },
+  { "key": "mod+shift+[", "command": "thread.previous" },
+  { "key": "mod+shift+]", "command": "thread.next" },
+  { "key": "mod+1", "command": "thread.jump.1" },
+  { "key": "mod+2", "command": "thread.jump.2" },
+  { "key": "mod+3", "command": "thread.jump.3" },
+  { "key": "mod+4", "command": "thread.jump.4" },
+  { "key": "mod+5", "command": "thread.jump.5" },
+  { "key": "mod+6", "command": "thread.jump.6" },
+  { "key": "mod+7", "command": "thread.jump.7" },
+  { "key": "mod+8", "command": "thread.jump.8" },
+  { "key": "mod+9", "command": "thread.jump.9" },
+  { "key": "mod+1", "command": "modelPicker.jump.1", "when": "modelPickerOpen" },
+  { "key": "mod+2", "command": "modelPicker.jump.2", "when": "modelPickerOpen" },
+  { "key": "mod+3", "command": "modelPicker.jump.3", "when": "modelPickerOpen" },
+  { "key": "mod+4", "command": "modelPicker.jump.4", "when": "modelPickerOpen" },
+  { "key": "mod+5", "command": "modelPicker.jump.5", "when": "modelPickerOpen" },
+  { "key": "mod+6", "command": "modelPicker.jump.6", "when": "modelPickerOpen" },
+  { "key": "mod+7", "command": "modelPicker.jump.7", "when": "modelPickerOpen" },
+  { "key": "mod+8", "command": "modelPicker.jump.8", "when": "modelPickerOpen" },
+  { "key": "mod+9", "command": "modelPicker.jump.9", "when": "modelPickerOpen" }
 ]
 ```
 
@@ -51,9 +74,20 @@ Invalid rules are ignored. Invalid config files are ignored. Warnings are logged
 - `terminal.split`: split terminal (in focused terminal context by default)
 - `terminal.new`: create new terminal (in focused terminal context by default)
 - `terminal.close`: close/kill the focused terminal (in focused terminal context by default)
+- `sidebar.left.toggle`: collapse or expand the left project/thread sidebar
+- `workbench.toggle`: collapse or expand the right Atelier workbench
+- `workbench.diffs`: open the workbench changed-files/diffs tab
+- `workbench.artifacts`: open the workbench artifacts tab
+- `workbench.web`: open the workbench browser tab
+- `workbench.notes`: open the workbench scratch tab
+- `diff.toggle`: open or close the diff/sidebar view
 - `commandPalette.toggle`: open or close the global command palette
 - `chat.new`: create a new chat thread preserving the active thread's branch/worktree state
 - `chat.newLocal`: create a new chat thread for the active project in a new environment (local/worktree determined by app settings (default `local`))
+- `modelPicker.toggle`: open or close the model/provider picker
+- `modelPicker.jump.1` through `modelPicker.jump.9`: choose a visible model/provider option while the model picker is open
+- `thread.previous` / `thread.next`: move between visible threads
+- `thread.jump.1` through `thread.jump.9`: jump to visible thread shortcuts
 - `editor.openFavorite`: open current project/worktree in the last-used editor
 - `script.{id}.run`: run a project script by id (for example `script.test.run`)
 
@@ -80,6 +114,7 @@ Currently available context keys:
 
 - `terminalFocus`
 - `terminalOpen`
+- `modelPickerOpen`
 
 Supported operators:
 

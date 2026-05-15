@@ -1,6 +1,6 @@
 # Observability
 
-T3 Code has one server-side observability model:
+Atelier has one server-side observability model:
 
 - pretty logs go to stdout for humans
 - completed spans go to a local NDJSON trace file
@@ -33,7 +33,7 @@ Important fields in each record:
 - `events`: embedded logs and custom events
 - `exit`: `Success`, `Failure`, or `Interrupted`
 
-The schema lives in `apps/server/src/observability/TraceRecord.ts`.
+The schema lives in `packages/shared/src/observability.ts`.
 
 ### Metrics
 
@@ -69,11 +69,11 @@ npx t3
 ```
 
 ```bash
-node --run dev
+bun run dev
 ```
 
 ```bash
-node --run dev:desktop
+bun run dev:desktop
 ```
 
 ### Option 2: Run With A Local LGTM Stack
@@ -122,13 +122,13 @@ npx t3
 Monorepo web/server dev:
 
 ```bash
-node --run dev
+bun run dev
 ```
 
 Monorepo desktop dev:
 
 ```bash
-node --run dev:desktop
+bun run dev:desktop
 ```
 
 Packaged desktop app:
@@ -141,7 +141,7 @@ macOS app bundle example:
 T3CODE_OTLP_TRACES_URL=http://localhost:4318/v1/traces \
 T3CODE_OTLP_METRICS_URL=http://localhost:4318/v1/metrics \
 T3CODE_OTLP_SERVICE_NAME=t3-desktop \
-"/Applications/T3 Code.app/Contents/MacOS/T3 Code"
+"/Applications/Atelier.app/Contents/MacOS/Atelier"
 ```
 
 Direct binary example:
@@ -174,7 +174,7 @@ tail -f "$T3CODE_HOME/userdata/logs/server.trace.ndjson"
 In monorepo dev, use:
 
 ```bash
-tail -f ./dev/logs/server.trace.ndjson
+tail -f ~/.t3/dev/logs/server.trace.ndjson
 ```
 
 Show failed spans:

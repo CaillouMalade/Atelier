@@ -1,5 +1,8 @@
 # Scripts
 
+The user-facing app is Atelier, but the backend CLI and env vars still use
+the inherited `t3` / `T3CODE_*` names.
+
 - `bun run dev` — Starts contracts, server, and web in `turbo watch` mode.
 - `bun run dev:server` — Starts just the WebSocket server (uses Bun TypeScript execution).
 - `bun run dev:web` — Starts just the Vite dev server for the web app.
@@ -8,6 +11,7 @@
   `bun run dev -- --base-dir ~/.t3-2`
 - `bun run start` — Runs the production server (serves built web app as static files).
 - `bun run build` — Builds contracts, web app, and server through Turbo.
+- `bun run build:desktop` — Builds the Electron app and backend.
 - `bun run typecheck` — Strict TypeScript checks for all packages.
 - `bun run test` — Runs workspace tests.
 - `bun run dist:desktop:artifact -- --platform <mac|linux|win> --target <target> --arch <arch>` — Builds a desktop artifact for a specific platform/target/arch.
@@ -19,9 +23,10 @@
 ## Desktop `.dmg` packaging notes
 
 - Default build is unsigned/not notarized for local sharing.
-- The DMG build uses `assets/macos-icon-1024.png` as the production app icon source.
+- The DMG build stages icons from `assets/prod`, `assets/nightly`, and `apps/desktop/resources`.
 - Desktop production windows load the bundled UI from `t3://app/index.html` (not a `127.0.0.1` document URL).
 - Desktop packaging includes `apps/server/dist` (the `t3` backend) and starts it on loopback with an auth token for WebSocket/API traffic.
+- Some generated artifact names and package identifiers still use inherited `T3-Code` / `t3code` naming.
 - Your tester can still open it on macOS by right-clicking the app and choosing **Open** on first launch.
 - To keep staging files for debugging package contents, run: `bun run dist:desktop:dmg -- --keep-stage`
 - To allow code-signing/notarization when configured in CI/secrets, add: `--signed`.

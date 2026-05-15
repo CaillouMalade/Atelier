@@ -2,6 +2,11 @@
 
 This document covers the unified release workflow for stable and nightly desktop releases.
 
+> Status for the private Atelier fork: this workflow is inherited from T3 Code and has not
+> been fully re-pointed for public Atelier distribution. Before using it, review the npm
+> package name (`t3`), app domains (`app.t3.codes`), update repository variables, signing
+> identities, artifact names, and release secrets.
+
 ## What the workflow does
 
 - Workflow: `.github/workflows/release.yml`

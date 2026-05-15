@@ -1,5 +1,11 @@
 # Quick start
 
+Install dependencies first:
+
+```bash
+bun install
+```
+
 ```bash
 # Development (with hot reload)
 bun run dev
@@ -17,6 +23,6 @@ bun run start
 # Build a shareable macOS .dmg (arm64 by default)
 bun run dist:desktop:dmg
 
-# Or from any project directory after publishing:
+# CLI/backend package name is still inherited from upstream:
 npx t3
 ```

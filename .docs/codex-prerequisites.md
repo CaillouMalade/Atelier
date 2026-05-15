@@ -1,5 +1,5 @@
 # Codex prerequisites
 
 - Install Codex CLI so `codex` is on your PATH.
-- Authenticate Codex before running T3 Code (for example via API key or ChatGPT auth supported by Codex).
-- T3 Code starts the server via `codex app-server` per session.
+- Authenticate Codex before running Atelier (for example via API key or ChatGPT auth supported by Codex).
+- The Codex driver starts `codex app-server` per session. Other built-in drivers use their own adapters.

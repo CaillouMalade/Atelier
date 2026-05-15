@@ -7,9 +7,13 @@
 
 ## Project Snapshot
 
-T3 Code is a minimal web GUI for using coding agents like Codex and Claude.
+Atelier is a local-first coding-agent workbench. The user-facing app is branded
+Atelier, while some internal package names, env vars, state directories, and the
+published CLI are still inherited from T3 Code (`t3`, `@t3tools/*`,
+`T3CODE_*`, `~/.t3`).
 
-This repository is a VERY EARLY WIP. Proposing sweeping changes that improve long-term maintainability is encouraged.
+This repository is a VERY EARLY WIP. Proposing changes that improve long-term
+maintainability is encouraged when they stay tied to the current product shape.
 
 ## Core Priorities
 
@@ -25,21 +29,25 @@ Long term maintainability is a core priority. If you add new functionality, firs
 
 ## Package Roles
 
-- `apps/server`: Node.js WebSocket server. Wraps Codex app-server (JSON-RPC over stdio), serves the React web app, and manages provider sessions.
-- `apps/web`: React/Vite UI. Owns session UX, conversation/event rendering, and client-side state. Connects to the server via WebSocket.
+- `apps/server`: Node.js HTTP/WebSocket server. Owns persistence, auth, project/workspace APIs, source control, terminals, provider sessions, and the static web app in production.
+- `apps/web`: React/Vite UI. Owns chat, project/thread navigation, settings, terminal UI, source control UI, and the Atelier workbench with changed files, artifacts, browser, and scratch tabs.
+- `apps/desktop`: Electron shell. Spawns a desktop-scoped `t3` backend process, configures desktop identity/updates, and loads the shared web app.
 - `packages/contracts`: Shared effect/Schema schemas and TypeScript contracts for provider events, WebSocket protocol, and model/session types. Keep this package schema-only — no runtime logic.
 - `packages/shared`: Shared runtime utilities consumed by both server and web. Uses explicit subpath exports (e.g. `@t3tools/shared/git`) — no barrel index.
 
-## Codex App Server (Important)
+## Provider Runtime (Important)
 
-T3 Code is currently Codex-first. The server starts `codex app-server` (JSON-RPC over stdio) per provider session, then streams structured events to the browser through WebSocket push messages.
+Atelier ships built-in provider drivers for Codex, Claude Code, Cursor Agent, and OpenCode. Provider instances are configured in settings, then resolved through the driver/instance registry so users can keep multiple named accounts or homes for the same driver.
+
+Codex still uses `codex app-server` (JSON-RPC over stdio) under the hood. Other providers use their own driver adapters, but all runtime activity is normalized into the same orchestration/event model before it reaches the UI.
 
 How we use it in this codebase:
 
-- Session startup/resume and turn lifecycle are brokered in `apps/server/src/codexAppServerManager.ts`.
-- Provider dispatch and thread event logging are coordinated in `apps/server/src/providerManager.ts`.
-- WebSocket server routes NativeApi methods in `apps/server/src/wsServer.ts`.
-- Web app consumes orchestration domain events via WebSocket push on channel `orchestration.domainEvent` (provider runtime activity is projected into orchestration events server-side).
+- Built-in drivers are registered in `apps/server/src/provider/builtInDrivers.ts`.
+- Provider instances are hydrated from server settings in `apps/server/src/provider/Layers/ProviderInstanceRegistryHydration.ts`.
+- Provider dispatch and thread event logging are coordinated through `apps/server/src/provider/Layers/ProviderService.ts`.
+- WebSocket server routes Effect RPC methods and subscriptions in `apps/server/src/ws.ts`.
+- Web app consumes projected orchestration state through `apps/web/src/rpc/wsRpcClient.ts` subscriptions.
 
 Docs:
 
