@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>T3 Code App Architecture Tutorial</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #18212f;
+        --muted: #667085;
+        --line: #d7dee8;
+        --panel: #ffffff;
+        --soft: #f5f7fa;
+        --brand: #0f766e;
+        --brand-strong: #115e59;
+        --accent: #b42318;
+        --gold: #b7791f;
+        --blue: #1d4ed8;
+        --shadow: 0 18px 50px rgba(24, 33, 47, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        color: var(--ink);
+        background: linear-gradient(180deg, rgba(15, 118, 110, 0.08), transparent 360px), #f8fafc;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .page {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 40px 24px 72px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+        gap: 28px;
+        align-items: stretch;
+        margin-bottom: 34px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--brand-strong);
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0;
+        margin-bottom: 14px;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--brand);
+        box-shadow: 0 0 0 5px rgba(15, 118, 110, 0.12);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        max-width: 800px;
+        font-size: clamp(42px, 7vw, 82px);
+        line-height: 0.94;
+        letter-spacing: 0;
+      }
+
+      .hero-copy {
+        color: #475467;
+        font-size: 18px;
+        line-height: 1.65;
+        max-width: 690px;
+        margin-top: 22px;
+      }
+
+      .hero-panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        padding: 22px;
+        min-height: 360px;
+      }
+
+      .stack-title {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0;
+        margin-bottom: 14px;
+      }
+
+      .stack {
+        display: grid;
+        gap: 10px;
+      }
+
+      .stack-row {
+        display: grid;
+        grid-template-columns: 118px 1fr;
+        gap: 10px;
+        align-items: center;
+        padding: 13px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .label {
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 32px;
+        border-radius: 999px;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 800;
+        background: var(--brand);
+      }
+
+      .label.web {
+        background: var(--blue);
+      }
+
+      .label.desktop {
+        background: var(--gold);
+      }
+
+      .label.server {
+        background: var(--brand);
+      }
+
+      .label.shared {
+        background: #344054;
+      }
+
+      .stack-row p {
+        color: #475467;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .section {
+        margin-top: 34px;
+      }
+
+      .section-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: end;
+        margin-bottom: 16px;
+      }
+
+      h2 {
+        font-size: clamp(28px, 4vw, 44px);
+        line-height: 1.05;
+        letter-spacing: 0;
+      }
+
+      .section-note {
+        color: var(--muted);
+        line-height: 1.55;
+        max-width: 520px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 18px;
+        min-height: 172px;
+      }
+
+      .card h3 {
+        font-size: 17px;
+        margin-bottom: 10px;
+      }
+
+      .card p,
+      .step p,
+      .file-list p {
+        color: #526174;
+        line-height: 1.55;
+        font-size: 14px;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .pill {
+        border: 1px solid #cbd5e1;
+        background: #f8fafc;
+        border-radius: 999px;
+        color: #344054;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 6px 9px;
+      }
+
+      .flow {
+        background: #111827;
+        color: #f9fafb;
+        border-radius: 8px;
+        padding: 20px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .flow-row {
+        display: grid;
+        grid-template-columns: 40px 1fr;
+        gap: 12px;
+        align-items: start;
+      }
+
+      .num {
+        width: 32px;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.13);
+        color: #a7f3d0;
+        font-weight: 800;
+      }
+
+      .flow h3 {
+        font-size: 16px;
+        margin-bottom: 4px;
+      }
+
+      .flow p {
+        color: #cbd5e1;
+        line-height: 1.55;
+        font-size: 14px;
+      }
+
+      .two-col {
+        display: grid;
+        grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+        gap: 14px;
+      }
+
+      .file-list {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .file-list h3 {
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--line);
+        font-size: 16px;
+      }
+
+      .file {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 5px;
+        padding: 14px 18px;
+        border-bottom: 1px solid #edf1f5;
+      }
+
+      .file:last-child {
+        border-bottom: 0;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, ui-monospace, monospace;
+        font-size: 13px;
+        color: #0f172a;
+        background: #eef2f7;
+        padding: 3px 6px;
+        border-radius: 5px;
+      }
+
+      .callout {
+        border-left: 4px solid var(--brand);
+        background: #ecfdf5;
+        border-radius: 8px;
+        padding: 18px;
+      }
+
+      .callout strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .callout p {
+        color: #315b56;
+        line-height: 1.55;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 10px;
+      }
+
+      .step {
+        display: grid;
+        grid-template-columns: 104px 1fr;
+        gap: 14px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+      }
+
+      .step strong {
+        color: var(--brand-strong);
+      }
+
+      footer {
+        margin-top: 40px;
+        padding-top: 22px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 900px) {
+        .hero,
+        .two-col,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .hero-panel {
+          min-height: auto;
+        }
+
+        .section-head {
+          display: block;
+        }
+
+        .section-note {
+          margin-top: 10px;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .page {
+          padding: 28px 16px 48px;
+        }
+
+        h1 {
+          font-size: 44px;
+        }
+
+        .stack-row,
+        .step {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div>
+          <div class="eyebrow"><span class="dot"></span> T3 Code architecture tutorial</div>
+          <h1>How the app works from UI click to agent output</h1>
+          <p class="hero-copy">
+            T3 Code is a local coding-agent workspace. The web UI sends typed RPC commands to a
+            local server, the server records domain events, provider adapters run Codex, Claude,
+            Cursor, or OpenCode, and the UI updates through live subscriptions.
+          </p>
+        </div>
+
+        <aside class="hero-panel" aria-label="Application layers">
+          <div class="stack-title">Application layers</div>
+          <div class="stack">
+            <div class="stack-row">
+              <span class="label web">Web</span>
+              <p>
+                React/Vite client. Renders projects, threads, chat, git status, terminals, and
+                settings.
+              </p>
+            </div>
+            <div class="stack-row">
+              <span class="label desktop">Desktop</span>
+              <p>
+                Electron shell. Provides native dialogs, menus, storage, updates, and backend
+                process management.
+              </p>
+            </div>
+            <div class="stack-row">
+              <span class="label server">Server</span>
+              <p>
+                Local backend. Owns auth, RPC, orchestration, providers, git, terminals,
+                persistence, and startup.
+              </p>
+            </div>
+            <div class="stack-row">
+              <span class="label shared">Contracts</span>
+              <p>
+                Shared schemas and RPC definitions used by the web client and server to stay
+                type-aligned.
+              </p>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>The short version</h2>
+          <p class="section-note">
+            The server is the source of truth. The UI is mostly a typed client over HTTP and
+            WebSocket RPC.
+          </p>
+        </div>
+        <div class="grid">
+          <article class="card">
+            <h3>1. Startup</h3>
+            <p>
+              <code>src/bin.ts</code> builds the CLI. The CLI resolves config, then launches
+              <code>src/server.ts</code>, which composes all Effect layers.
+            </p>
+            <div class="pill-row">
+              <span class="pill">CLI flags</span>
+              <span class="pill">env vars</span>
+              <span class="pill">desktop bootstrap</span>
+            </div>
+          </article>
+          <article class="card">
+            <h3>2. Runtime</h3>
+            <p>
+              The server starts HTTP routes, WebSocket RPC, SQLite, auth, settings, providers, VCS,
+              terminal sessions, workspace search, and observability.
+            </p>
+            <div class="pill-row">
+              <span class="pill">Effect layers</span>
+              <span class="pill">SQLite</span>
+              <span class="pill">WebSocket RPC</span>
+            </div>
+          </article>
+          <article class="card">
+            <h3>3. Work</h3>
+            <p>
+              User actions become orchestration commands. Commands create events. Reactors turn
+              events into provider calls, checkpoints, and live UI updates.
+            </p>
+            <div class="pill-row">
+              <span class="pill">commands</span>
+              <span class="pill">events</span>
+              <span class="pill">reactors</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section two-col">
+        <div class="flow">
+          <div class="flow-row">
+            <span class="num">1</span>
+            <div>
+              <h3>User sends a message</h3>
+              <p>The web app dispatches an orchestration command over WebSocket RPC.</p>
+            </div>
+          </div>
+          <div class="flow-row">
+            <span class="num">2</span>
+            <div>
+              <h3>Server records an event</h3>
+              <p>
+                The orchestration engine validates the command, appends events, and updates
+                projections.
+              </p>
+            </div>
+          </div>
+          <div class="flow-row">
+            <span class="num">3</span>
+            <div>
+              <h3>Provider reactor starts work</h3>
+              <p>The provider command reactor starts or resumes the selected provider session.</p>
+            </div>
+          </div>
+          <div class="flow-row">
+            <span class="num">4</span>
+            <div>
+              <h3>Adapter streams output</h3>
+              <p>Codex, Claude, Cursor, or OpenCode emits runtime events as the agent works.</p>
+            </div>
+          </div>
+          <div class="flow-row">
+            <span class="num">5</span>
+            <div>
+              <h3>UI updates live</h3>
+              <p>
+                Runtime events become messages, activities, approvals, plans, diffs, and status
+                updates.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="file-list">
+          <h3>Files to read first</h3>
+          <div class="file">
+            <code>apps/server/src/bin.ts</code>
+            <p>CLI entrypoint and subcommand registration.</p>
+          </div>
+          <div class="file">
+            <code>apps/server/src/server.ts</code>
+            <p>
+              Main server composition: routes, runtime services, persistence, providers, VCS, auth.
+            </p>
+          </div>
+          <div class="file">
+            <code>apps/server/src/ws.ts</code>
+            <p>WebSocket RPC handlers used by the web UI.</p>
+          </div>
+          <div class="file">
+            <code>apps/server/src/orchestration/Layers/OrchestrationEngine.ts</code>
+            <p>Command queue, event append, command receipts, projection updates, event stream.</p>
+          </div>
+          <div class="file">
+            <code>apps/server/src/provider/Layers/ProviderService.ts</code>
+            <p>
+              Cross-provider routing for sessions, turns, approvals, interruptions, and rollback.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>Key subsystems</h2>
+          <p class="section-note">
+            Each subsystem is isolated behind an Effect service and then wired into the server
+            layer.
+          </p>
+        </div>
+        <div class="grid">
+          <article class="card">
+            <h3>Auth</h3>
+            <p>
+              Browser sessions, bearer sessions, pairing links, client revocation, and short-lived
+              WebSocket tokens live under <code>src/auth</code>.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Providers</h3>
+            <p>
+              Provider drivers materialize instances. Each instance owns a snapshot, adapter, and
+              text-generation implementation.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Orchestration</h3>
+            <p>
+              Commands become events. Events update projections and trigger reactors. This is the
+              heart of thread and project state.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Git and VCS</h3>
+            <p>
+              Git status, refs, worktrees, pull, source-control detection, PR lookup, and publishing
+              are split across <code>src/git</code>, <code>src/vcs</code>, and
+              <code>src/sourceControl</code>.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Terminals</h3>
+            <p>
+              Terminal sessions use PTY adapters, persist history, stream output, and support
+              open/write/resize/restart/close RPC calls.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Checkpointing</h3>
+            <p>
+              Checkpoints capture git state before and after turns, then compute per-turn file diffs
+              for the UI.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>Read this as a tutorial</h2>
+          <p class="section-note">
+            Follow the runtime in this order to understand the whole app without getting lost.
+          </p>
+        </div>
+        <div class="timeline">
+          <div class="step">
+            <strong>Step 1</strong>
+            <p>
+              Start at <code>src/bin.ts</code>. It defines the <code>t3</code> CLI and delegates to
+              server commands.
+            </p>
+          </div>
+          <div class="step">
+            <strong>Step 2</strong>
+            <p>
+              Open <code>src/cli/config.ts</code>. This explains how ports, paths, mode, auth
+              bootstrap, static assets, and observability config are resolved.
+            </p>
+          </div>
+          <div class="step">
+            <strong>Step 3</strong>
+            <p>
+              Open <code>src/server.ts</code>. This is the dependency graph: persistence, providers,
+              VCS, workspaces, terminal, auth, and routes.
+            </p>
+          </div>
+          <div class="step">
+            <strong>Step 4</strong>
+            <p>Open <code>src/ws.ts</code>. This maps client RPC calls to server services.</p>
+          </div>
+          <div class="step">
+            <strong>Step 5</strong>
+            <p>
+              Open the orchestration engine, decider, and projector. That trio explains how
+              persistent app state is created and read.
+            </p>
+          </div>
+          <div class="step">
+            <strong>Step 6</strong>
+            <p>
+              Open provider drivers and provider service. That explains how a thread reaches Codex,
+              Claude, Cursor, or OpenCode.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section callout">
+        <strong>The core idea</strong>
+        <p>
+          T3 Code is not just a chat UI. It is a local event-sourced control plane for coding
+          agents. The UI sends commands, the server records events, reactors perform side effects,
+          and projections keep the interface fast and consistent.
+        </p>
+      </section>
+
+      <footer>Generated as a standalone local tutorial for the current T3 Code source tree.</footer>
+    </main>
+  </body>
+</html>

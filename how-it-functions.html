@@ -1,0 +1,1316 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>T3 Code Function Map</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f3ee;
+        --surface: #fffdf8;
+        --surface-2: #ebe8df;
+        --ink: #151515;
+        --muted: #65625c;
+        --line: #d9d3c7;
+        --blue: #3167a8;
+        --green: #27745e;
+        --red: #b54d3d;
+        --gold: #9b6b19;
+        --violet: #6e55a0;
+        --teal: #2d7882;
+        --shadow: 0 18px 50px rgba(28, 24, 17, 0.12);
+        --radius: 8px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(90deg, rgba(49, 103, 168, 0.07), transparent 34%),
+          linear-gradient(180deg, rgba(181, 77, 61, 0.07), transparent 30%), var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.45;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .page {
+        min-height: 100vh;
+      }
+
+      header {
+        padding: 28px clamp(16px, 4vw, 44px) 18px;
+        border-bottom: 1px solid rgba(21, 21, 21, 0.08);
+      }
+
+      .header-inner {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 18px;
+        max-width: 1320px;
+        margin: 0 auto;
+        align-items: end;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--muted);
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        max-width: 900px;
+        font-size: clamp(2rem, 4vw, 4.8rem);
+        line-height: 0.95;
+        letter-spacing: 0;
+      }
+
+      .subhead {
+        margin: 16px 0 0;
+        max-width: 760px;
+        color: var(--muted);
+        font-size: 1rem;
+      }
+
+      .source-chip {
+        display: inline-grid;
+        gap: 3px;
+        min-width: 220px;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 253, 248, 0.78);
+        box-shadow: var(--shadow);
+      }
+
+      .source-chip strong {
+        font-size: 0.86rem;
+      }
+
+      .source-chip span {
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      main {
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 22px clamp(16px, 4vw, 44px) 52px;
+      }
+
+      .toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+        gap: 14px;
+        align-items: center;
+        padding: 12px 0;
+        background: linear-gradient(180deg, rgba(246, 243, 238, 0.98), rgba(246, 243, 238, 0.88));
+        backdrop-filter: blur(16px);
+      }
+
+      .tabs {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        scrollbar-width: thin;
+      }
+
+      .tab-button,
+      .scenario-button,
+      .node-button,
+      .mini-button {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        color: var(--ink);
+      }
+
+      .tab-button {
+        min-height: 40px;
+        padding: 0 14px;
+        white-space: nowrap;
+      }
+
+      .tab-button[aria-selected="true"] {
+        background: var(--ink);
+        color: #fffdf8;
+        border-color: var(--ink);
+      }
+
+      .search {
+        width: 100%;
+        min-height: 40px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        color: var(--ink);
+      }
+
+      .panel {
+        display: none;
+      }
+
+      .panel.active {
+        display: block;
+      }
+
+      .grid-two {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .section-title {
+        margin: 28px 0 12px;
+        font-size: 1.2rem;
+      }
+
+      .intro-band {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin: 10px 0 20px;
+      }
+
+      .metric {
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 253, 248, 0.82);
+      }
+
+      .metric strong {
+        display: block;
+        font-size: 1.25rem;
+      }
+
+      .metric span {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+
+      .map-wrap {
+        display: grid;
+        gap: 12px;
+      }
+
+      .map-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        position: relative;
+      }
+
+      .node-button {
+        min-height: 146px;
+        padding: 14px;
+        text-align: left;
+        transition:
+          transform 150ms ease,
+          border-color 150ms ease,
+          box-shadow 150ms ease;
+      }
+
+      .node-button:hover,
+      .node-button.active {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow);
+      }
+
+      .node-button.active {
+        border-color: currentColor;
+        outline: 2px solid rgba(21, 21, 21, 0.08);
+      }
+
+      .node-head {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .node-icon {
+        display: grid;
+        flex: 0 0 36px;
+        width: 36px;
+        height: 36px;
+        place-items: center;
+        border-radius: 7px;
+        color: #fff;
+        font-size: 0.8rem;
+        font-weight: 800;
+      }
+
+      .node-title {
+        display: block;
+        font-weight: 800;
+      }
+
+      .node-type {
+        display: block;
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .node-summary {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .detail {
+        position: sticky;
+        top: 78px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 253, 248, 0.9);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .detail-header {
+        padding: 18px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .detail-header h2 {
+        margin: 0;
+        font-size: 1.25rem;
+      }
+
+      .detail-header p {
+        margin: 7px 0 0;
+        color: var(--muted);
+      }
+
+      .detail-body {
+        padding: 16px 18px 18px;
+      }
+
+      .detail-body h3 {
+        margin: 18px 0 8px;
+        font-size: 0.86rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .tag-list,
+      .source-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        padding: 0;
+        margin: 0;
+        list-style: none;
+      }
+
+      .tag-list li,
+      .source-list li {
+        padding: 6px 8px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #faf7f0;
+        color: #38342d;
+        font-size: 0.8rem;
+      }
+
+      .source-list li {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: minmax(230px, 0.72fr) minmax(0, 1.28fr);
+        gap: 16px;
+        align-items: start;
+      }
+
+      .scenario-list {
+        display: grid;
+        gap: 9px;
+      }
+
+      .scenario-button {
+        padding: 12px;
+        text-align: left;
+      }
+
+      .scenario-button.active {
+        border-color: var(--ink);
+        background: var(--ink);
+        color: #fffdf8;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 10px;
+      }
+
+      .step {
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+        padding: 13px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+      }
+
+      .step-number {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 7px;
+        background: var(--ink);
+        color: #fffdf8;
+        font-weight: 800;
+      }
+
+      .step h3 {
+        margin: 0 0 3px;
+        font-size: 1rem;
+      }
+
+      .step p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .step code,
+      .detail code,
+      .module code {
+        padding: 2px 5px;
+        border: 1px solid rgba(21, 21, 21, 0.08);
+        border-radius: 5px;
+        background: #f1eee7;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.86em;
+      }
+
+      .modules-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .module {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+      }
+
+      .module h3 {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin: 0 0 8px;
+        font-size: 1rem;
+      }
+
+      .module p {
+        margin: 0 0 12px;
+        color: var(--muted);
+      }
+
+      .module-foot {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+
+      .mini-button {
+        padding: 7px 9px;
+        font-size: 0.78rem;
+      }
+
+      .mini-button.active {
+        border-color: var(--ink);
+        background: var(--ink);
+        color: #fffdf8;
+      }
+
+      .mode-layout {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .mode {
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+      }
+
+      .mode h2 {
+        margin: 0 0 8px;
+        font-size: 1.1rem;
+      }
+
+      .mode p {
+        margin: 0 0 12px;
+        color: var(--muted);
+      }
+
+      .mode ol {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .note {
+        margin-top: 18px;
+        padding: 14px;
+        border: 1px dashed rgba(21, 21, 21, 0.2);
+        border-radius: var(--radius);
+        background: rgba(255, 253, 248, 0.7);
+        color: var(--muted);
+      }
+
+      .hidden-by-search {
+        display: none;
+      }
+
+      [data-accent="blue"] {
+        color: var(--blue);
+      }
+
+      [data-accent="green"] {
+        color: var(--green);
+      }
+
+      [data-accent="red"] {
+        color: var(--red);
+      }
+
+      [data-accent="gold"] {
+        color: var(--gold);
+      }
+
+      [data-accent="violet"] {
+        color: var(--violet);
+      }
+
+      [data-accent="teal"] {
+        color: var(--teal);
+      }
+
+      [data-accent="blue"] .node-icon,
+      .swatch-blue {
+        background: var(--blue);
+      }
+
+      [data-accent="green"] .node-icon,
+      .swatch-green {
+        background: var(--green);
+      }
+
+      [data-accent="red"] .node-icon,
+      .swatch-red {
+        background: var(--red);
+      }
+
+      [data-accent="gold"] .node-icon,
+      .swatch-gold {
+        background: var(--gold);
+      }
+
+      [data-accent="violet"] .node-icon,
+      .swatch-violet {
+        background: var(--violet);
+      }
+
+      [data-accent="teal"] .node-icon,
+      .swatch-teal {
+        background: var(--teal);
+      }
+
+      .swatch {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+      }
+
+      @media (max-width: 980px) {
+        .header-inner,
+        .grid-two,
+        .flow,
+        .toolbar {
+          grid-template-columns: 1fr;
+        }
+
+        .source-chip,
+        .detail {
+          position: static;
+        }
+
+        .map-row,
+        .modules-grid,
+        .mode-layout,
+        .intro-band {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 640px) {
+        header {
+          padding-top: 22px;
+        }
+
+        .map-row,
+        .modules-grid,
+        .mode-layout,
+        .intro-band {
+          grid-template-columns: 1fr;
+        }
+
+        .node-button {
+          min-height: 130px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <div class="header-inner">
+          <div>
+            <p class="eyebrow">Quick repository map</p>
+            <h1>T3 Code function map</h1>
+            <p class="subhead">
+              A light, clickable view of how this monorepo appears to work from a quick source pass:
+              launch surfaces, server runtime, web client, orchestration, provider adapters, and the
+              shared packages tying them together.
+            </p>
+          </div>
+          <div class="source-chip" aria-label="scan scope">
+            <strong>Scan scope</strong>
+            <span
+              >README, package manifests, server entry points, web routing, RPC, provider tree</span
+            >
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <div class="toolbar">
+          <nav class="tabs" aria-label="Sections">
+            <button class="tab-button" type="button" data-tab="overview" aria-selected="true">
+              Overview
+            </button>
+            <button class="tab-button" type="button" data-tab="flow" aria-selected="false">
+              Prompt flow
+            </button>
+            <button class="tab-button" type="button" data-tab="modules" aria-selected="false">
+              Modules
+            </button>
+            <button class="tab-button" type="button" data-tab="modes" aria-selected="false">
+              Runtime modes
+            </button>
+          </nav>
+          <input
+            id="search"
+            class="search"
+            type="search"
+            placeholder="Filter packages, files, or concepts"
+            aria-label="Filter repository map"
+          />
+        </div>
+
+        <section id="overview" class="panel active" aria-labelledby="overview-title">
+          <h2 id="overview-title" class="section-title">What it is</h2>
+          <div class="intro-band">
+            <div class="metric">
+              <strong>Monorepo</strong>
+              <span>Bun workspaces plus Turbo build scripts.</span>
+            </div>
+            <div class="metric">
+              <strong>Web GUI</strong>
+              <span>React, Vite, TanStack Router, Effect RPC.</span>
+            </div>
+            <div class="metric">
+              <strong>Agent server</strong>
+              <span>Effect HTTP/WS runtime that manages providers, git, terminals, auth.</span>
+            </div>
+            <div class="metric">
+              <strong>Desktop shell</strong>
+              <span>Electron product named Atelier that starts and exposes the local backend.</span>
+            </div>
+          </div>
+
+          <div class="grid-two">
+            <div class="map-wrap" id="nodeMap" aria-label="Architecture map"></div>
+            <aside class="detail" aria-live="polite">
+              <div class="detail-header">
+                <h2 id="detailTitle">Select a node</h2>
+                <p id="detailSummary">Click any piece of the map to see what it owns.</p>
+              </div>
+              <div class="detail-body">
+                <h3>Responsibilities</h3>
+                <ul id="detailResponsibilities" class="tag-list"></ul>
+                <h3>Files sampled</h3>
+                <ul id="detailSources" class="source-list"></ul>
+                <h3>Notes</h3>
+                <p id="detailNotes" class="note">The first node is selected automatically.</p>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section id="flow" class="panel" aria-labelledby="flow-title">
+          <h2 id="flow-title" class="section-title">Prompt lifecycle</h2>
+          <div class="flow">
+            <div class="scenario-list" id="scenarioList" aria-label="Flow scenarios"></div>
+            <div class="timeline" id="timeline" aria-live="polite"></div>
+          </div>
+        </section>
+
+        <section id="modules" class="panel" aria-labelledby="modules-title">
+          <h2 id="modules-title" class="section-title">Module quick cards</h2>
+          <div class="modules-grid" id="modulesGrid"></div>
+        </section>
+
+        <section id="modes" class="panel" aria-labelledby="modes-title">
+          <h2 id="modes-title" class="section-title">How the same system runs</h2>
+          <div class="mode-layout" id="modeLayout"></div>
+          <p class="note">
+            This is a quick orientation file, not formal architecture documentation. The server
+            layers are dense and probably deserve a deeper read before changing core orchestration
+            or provider runtime behavior.
+          </p>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const nodes = [
+        {
+          id: "web",
+          title: "Web app",
+          type: "apps/web",
+          icon: "UI",
+          accent: "blue",
+          summary:
+            "React workbench for chat threads, settings, diffs, terminal output, provider selection, and repository controls.",
+          responsibilities: [
+            "TanStack routing",
+            "Chat composer and timeline",
+            "Provider/model UI",
+            "Terminal and diff panels",
+            "WebSocket RPC client",
+          ],
+          sources: [
+            "apps/web/src/main.tsx",
+            "apps/web/src/router.ts",
+            "apps/web/src/rpc/wsRpcClient.ts",
+            "apps/web/src/components/AtelierWorkbench.tsx",
+          ],
+          notes:
+            "Electron uses hash history, browser mode uses normal history. Most client-server work seems funneled through the typed WS RPC wrapper.",
+        },
+        {
+          id: "server",
+          title: "Server CLI",
+          type: "apps/server",
+          icon: "SV",
+          accent: "green",
+          summary:
+            "The t3 binary starts an Effect runtime that serves the web app, HTTP endpoints, WebSocket RPC, and local services.",
+          responsibilities: [
+            "CLI commands",
+            "HTTP routes",
+            "WebSocket RPC",
+            "Auth sessions",
+            "Layer composition",
+            "Runtime startup",
+          ],
+          sources: [
+            "apps/server/src/bin.ts",
+            "apps/server/src/cli/server.ts",
+            "apps/server/src/server.ts",
+            "apps/server/src/ws.ts",
+          ],
+          notes:
+            "server.ts is the central assembly point. It composes persistence, providers, orchestration, terminals, git, VCS, telemetry, and HTTP serving.",
+        },
+        {
+          id: "orchestration",
+          title: "Orchestration",
+          type: "apps/server/src/orchestration",
+          icon: "OR",
+          accent: "red",
+          summary:
+            "Command/event machinery that turns UI actions into durable events, projections, provider work, diffs, and thread snapshots.",
+          responsibilities: [
+            "Command normalization",
+            "Dispatch",
+            "Event projection",
+            "Thread subscriptions",
+            "Provider reactors",
+            "Checkpoint reactors",
+          ],
+          sources: [
+            "apps/server/src/orchestration/http.ts",
+            "apps/server/src/orchestration/Layers/OrchestrationEngine.ts",
+            "apps/server/src/orchestration/Layers/ProjectionPipeline.ts",
+            "apps/server/src/orchestration/projector.ts",
+          ],
+          notes:
+            "The browser can read snapshots over HTTP and live state over WS. Owner auth gates dispatch and snapshot routes.",
+        },
+        {
+          id: "providers",
+          title: "Provider adapters",
+          type: "apps/server/src/provider",
+          icon: "AI",
+          accent: "violet",
+          summary:
+            "Driver and adapter layer for Codex, Claude, OpenCode, Cursor, and ACP-style runtimes.",
+          responsibilities: [
+            "Provider catalog",
+            "Instance hydration",
+            "Session directories",
+            "Adapter lookup",
+            "Native event logging",
+            "Canonical event normalization",
+          ],
+          sources: [
+            "apps/server/src/provider/builtInDrivers.ts",
+            "apps/server/src/provider/Drivers/CodexDriver.ts",
+            "apps/server/src/provider/Layers/ProviderService.ts",
+            "apps/server/src/provider/acp/AcpSessionRuntime.ts",
+          ],
+          notes:
+            "Provider instances look like a key concept. The runtime resolves a ProviderInstanceId through the registry, then streams provider output back into orchestration.",
+        },
+        {
+          id: "desktop",
+          title: "Desktop shell",
+          type: "apps/desktop",
+          icon: "DT",
+          accent: "gold",
+          summary:
+            "Electron host for the local app. It handles windows, updater, safe storage, backend management, SSH environments, and server exposure.",
+          responsibilities: [
+            "Electron lifecycle",
+            "Backend process management",
+            "IPC methods",
+            "Updates",
+            "Settings storage",
+            "Remote SSH runner",
+          ],
+          sources: [
+            "apps/desktop/src/main.ts",
+            "apps/desktop/src/backend/DesktopBackendManager.ts",
+            "apps/desktop/src/window/DesktopWindow.ts",
+            "apps/desktop/src/ssh/DesktopSshEnvironment.ts",
+          ],
+          notes:
+            "package.json productName is Atelier. The desktop app can resolve a remote t3 CLI runner for SSH-backed environments.",
+        },
+        {
+          id: "contracts",
+          title: "Contracts",
+          type: "packages/contracts",
+          icon: "CT",
+          accent: "teal",
+          summary:
+            "Effect Schema contracts shared by web, desktop, and server for auth, orchestration, provider, terminal, VCS, RPC, and settings shapes.",
+          responsibilities: [
+            "Shared schemas",
+            "RPC method groups",
+            "Command payloads",
+            "Read models",
+            "Domain IDs",
+          ],
+          sources: [
+            "packages/contracts/src/orchestration.ts",
+            "packages/contracts/src/provider.ts",
+            "packages/contracts/src/rpc.ts",
+            "packages/contracts/src/terminal.ts",
+          ],
+          notes:
+            "This is the type boundary that lets the web client and server talk with fewer stringly typed contracts.",
+        },
+        {
+          id: "persistence",
+          title: "Persistence",
+          type: "apps/server/src/persistence",
+          icon: "DB",
+          accent: "green",
+          summary:
+            "SQLite-backed event store, projections, auth sessions, command receipts, runtime state, and migrations.",
+          responsibilities: [
+            "SQLite layer",
+            "Orchestration events",
+            "Projection tables",
+            "Auth records",
+            "Migrations",
+          ],
+          sources: [
+            "apps/server/src/persistence/Layers/Sqlite.ts",
+            "apps/server/src/persistence/Layers/OrchestrationEventStore.ts",
+            "apps/server/src/persistence/Migrations.ts",
+            "apps/server/src/persistence/Migrations/005_Projections.ts",
+          ],
+          notes:
+            "The projection layer suggests an event-sourced-ish design: commands create events, projections make UI-friendly snapshots.",
+        },
+        {
+          id: "vcs",
+          title: "VCS and source control",
+          type: "apps/server/src/vcs + git",
+          icon: "SC",
+          accent: "blue",
+          summary:
+            "Git/VCS driver services, worktree creation, status broadcasting, source-control provider discovery, and PR workflows.",
+          responsibilities: [
+            "Git manager",
+            "Worktrees",
+            "Status streams",
+            "PR thread prep",
+            "Source control APIs",
+          ],
+          sources: [
+            "apps/server/src/git/GitManager.ts",
+            "apps/server/src/git/GitWorkflowService.ts",
+            "apps/server/src/vcs/VcsDriverRegistry.ts",
+            "apps/server/src/sourceControl/SourceControlProviderRegistry.ts",
+          ],
+          notes:
+            "The UI has BranchToolbar and GitActionsControl, while the server owns actual repository and worktree operations.",
+        },
+        {
+          id: "terminal",
+          title: "Terminal and workspace",
+          type: "apps/server/src/terminal + workspace",
+          icon: "SH",
+          accent: "gold",
+          summary:
+            "PTY-backed terminal sessions plus workspace browsing/search/write helpers exposed to the UI over WS RPC.",
+          responsibilities: [
+            "PTY adapter",
+            "Terminal manager",
+            "Workspace entries",
+            "Filesystem browse",
+            "Project scripts",
+          ],
+          sources: [
+            "apps/server/src/terminal/Layers/Manager.ts",
+            "apps/server/src/workspace/Layers/WorkspaceEntries.ts",
+            "apps/server/src/workspace/Layers/WorkspaceFileSystem.ts",
+            "apps/web/src/components/ThreadTerminalDrawer.tsx",
+          ],
+          notes:
+            "server.ts chooses BunPTY or NodePTY at runtime, then exposes terminal open/write/resize/clear/restart/close methods through WS RPC.",
+        },
+      ];
+
+      const scenarios = [
+        {
+          id: "prompt",
+          title: "User sends a prompt",
+          steps: [
+            {
+              title: "Web client has a live server connection",
+              text: "The React app boots through main.tsx, creates the router, then uses the WS transport at /ws for typed server calls and subscriptions.",
+            },
+            {
+              title: "Composer dispatches an orchestration command",
+              text: "Chat UI code calls the WsRpcClient orchestration facade, or the HTTP dispatch route, with a ClientOrchestrationCommand from packages/contracts.",
+            },
+            {
+              title: "Server authenticates and normalizes",
+              text: "The server checks owner session auth, decodes the payload, and runs normalizeDispatchCommand before handing it to OrchestrationEngine.",
+            },
+            {
+              title: "Events and projections update",
+              text: "The engine records domain events. Projectors and reactors update the read model, command receipts, checkpoints, thread state, and shell state.",
+            },
+            {
+              title: "Provider runtime does the agent work",
+              text: "ProviderCommandReactor routes the turn to ProviderService, which resolves the configured provider instance and streams Codex, Claude, OpenCode, or Cursor runtime events.",
+            },
+            {
+              title: "UI receives the result stream",
+              text: "Thread and shell subscriptions push messages, activity, diffs, pending approvals, and terminal state back to the web workbench.",
+            },
+          ],
+        },
+        {
+          id: "desktop",
+          title: "Desktop app starts",
+          steps: [
+            {
+              title: "Electron main builds service layers",
+              text: "apps/desktop/src/main.ts wires Electron app/window/menu/protocol/updater services into the desktop runtime layer.",
+            },
+            {
+              title: "Backend manager resolves the server",
+              text: "Desktop backend configuration decides how to start or reach the t3 server, then exposes its endpoint to the window.",
+            },
+            {
+              title: "Window loads the web app",
+              text: "Electron loads the same web UI with hash history so file-backed routing works inside the desktop shell.",
+            },
+            {
+              title: "IPC covers desktop-only actions",
+              text: "Preload and IPC handlers expose settings, update, window, SSH, and server exposure actions that normal browser mode does not own.",
+            },
+          ],
+        },
+        {
+          id: "remote",
+          title: "Remote/SSH environment",
+          steps: [
+            {
+              title: "Desktop chooses a remote runner",
+              text: "DesktopSshEnvironment resolves either a development server entry path or a package spec for the remote t3 CLI version.",
+            },
+            {
+              title: "SSH/tunnel package starts the server remotely",
+              text: "@t3tools/ssh handles command construction, auth, tunnel config, and remote API details.",
+            },
+            {
+              title: "Web UI still talks to a server endpoint",
+              text: "Once exposed, the UI uses the same contracts and RPC surface. Local versus remote mostly changes how the backend is reached.",
+            },
+          ],
+        },
+        {
+          id: "git",
+          title: "Git action or diff",
+          steps: [
+            {
+              title: "UI asks for VCS or git workflow",
+              text: "BranchToolbar, GitActionsControl, and diff panels call the WS RPC client methods under vcs, git, or orchestration diff helpers.",
+            },
+            {
+              title: "Server runs repository services",
+              text: "GitManager, GitWorkflowService, VcsDriverRegistry, and SourceControlRepositoryService own filesystem and provider-specific source control behavior.",
+            },
+            {
+              title: "Status is streamed back",
+              text: "VcsStatusBroadcaster produces status events; the web client applies them incrementally using shared git helpers.",
+            },
+          ],
+        },
+      ];
+
+      const modules = [
+        {
+          title: "apps/web",
+          accent: "blue",
+          body: "Client application: routes, workbench, chat timeline, settings, model/provider pickers, terminal drawer, git controls, and RPC transport.",
+          tags: ["React 19", "Vite", "TanStack Router", "Effect RPC"],
+        },
+        {
+          title: "apps/server",
+          accent: "green",
+          body: "Installable CLI package named t3. Runs the local server, serves static/dev web assets, manages auth, agents, VCS, terminal, and persistence.",
+          tags: ["Effect", "HTTP", "WebSocket", "SQLite", "node-pty"],
+        },
+        {
+          title: "apps/desktop",
+          accent: "gold",
+          body: "Electron wrapper named Atelier. Manages local backend lifecycle, window protocol, settings, updates, safe storage, and SSH environment helpers.",
+          tags: ["Electron", "IPC", "Updater", "SSH"],
+        },
+        {
+          title: "packages/contracts",
+          accent: "teal",
+          body: "Shared schema boundary for IDs, RPC groups, orchestration commands/read models, provider data, auth, terminal, VCS, and settings.",
+          tags: ["Effect Schema", "RPC types", "Domain contracts"],
+        },
+        {
+          title: "packages/shared",
+          accent: "violet",
+          body: "Cross-cutting helpers for git status, model metadata, schema JSON decoding, shell/path utilities, search ranking, logging, and semver.",
+          tags: ["Utilities", "Git helpers", "Path helpers"],
+        },
+        {
+          title: "packages/ssh",
+          accent: "red",
+          body: "Remote server access support: SSH command/auth/config/tunnel behavior used by desktop remote environments.",
+          tags: ["SSH", "Tunnels", "Remote CLI"],
+        },
+        {
+          title: "packages/tailscale",
+          accent: "green",
+          body: "Tailscale Serve integration used by the server when configured to expose the local HTTP port.",
+          tags: ["Remote access", "Networking"],
+        },
+        {
+          title: "apps/marketing",
+          accent: "blue",
+          body: "Astro marketing/download site, separate from the interactive app runtime.",
+          tags: ["Astro", "Static site", "Downloads"],
+        },
+        {
+          title: "scripts",
+          accent: "gold",
+          body: "Release, desktop artifact, dev runner, manifest merge, update package version, smoke test, and icon sync tooling.",
+          tags: ["Build", "Release", "Smoke tests"],
+        },
+        {
+          title: "oxlint-plugin-t3code",
+          accent: "red",
+          body: "Local lint plugin with rules such as no-inline-schema-compile, plus tests and utilities.",
+          tags: ["Oxlint", "Repo rules"],
+        },
+      ];
+
+      const modes = [
+        {
+          title: "CLI/web mode",
+          body: "The t3 package can run the server directly. In development the repo also splits server and web dev scripts.",
+          steps: [
+            "Run npx t3 or the monorepo dev scripts.",
+            "Server resolves config, starts HTTP/WS, persists runtime state.",
+            "Browser loads the Vite app in dev or bundled static assets in production.",
+            "Web client connects to /ws and server HTTP routes.",
+          ],
+        },
+        {
+          title: "Desktop mode",
+          body: "The Electron app provides a desktop wrapper around the same server and web workbench.",
+          steps: [
+            "Electron main composes desktop services.",
+            "Backend manager starts or locates the t3 server.",
+            "Window loads the web UI with hash routing.",
+            "IPC adds desktop-only settings, updates, SSH, and shell behavior.",
+          ],
+        },
+        {
+          title: "Remote mode",
+          body: "Remote environments appear to reuse the same server API after a tunnel or exposed endpoint is established.",
+          steps: [
+            "Desktop resolves remote t3 runner options.",
+            "SSH package starts the CLI remotely and establishes access.",
+            "Optional Tailscale Serve can expose local server ports.",
+            "The web client continues through shared contracts and RPC calls.",
+          ],
+        },
+      ];
+
+      const nodeMap = document.querySelector("#nodeMap");
+      const detailTitle = document.querySelector("#detailTitle");
+      const detailSummary = document.querySelector("#detailSummary");
+      const detailResponsibilities = document.querySelector("#detailResponsibilities");
+      const detailSources = document.querySelector("#detailSources");
+      const detailNotes = document.querySelector("#detailNotes");
+      const scenarioList = document.querySelector("#scenarioList");
+      const timeline = document.querySelector("#timeline");
+      const modulesGrid = document.querySelector("#modulesGrid");
+      const modeLayout = document.querySelector("#modeLayout");
+      const search = document.querySelector("#search");
+
+      function chunk(items, size) {
+        const rows = [];
+        for (let index = 0; index < items.length; index += size) {
+          rows.push(items.slice(index, index + size));
+        }
+        return rows;
+      }
+
+      function renderNodes() {
+        nodeMap.innerHTML = "";
+        chunk(nodes, 3).forEach((row) => {
+          const rowElement = document.createElement("div");
+          rowElement.className = "map-row";
+          row.forEach((node) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "node-button";
+            button.dataset.nodeId = node.id;
+            button.dataset.searchText = [
+              node.title,
+              node.type,
+              node.summary,
+              ...node.responsibilities,
+              ...node.sources,
+              node.notes,
+            ]
+              .join(" ")
+              .toLowerCase();
+            button.dataset.accent = node.accent;
+            button.innerHTML = `
+              <span class="node-head">
+                <span class="node-icon" aria-hidden="true">${node.icon}</span>
+                <span>
+                  <span class="node-title">${node.title}</span>
+                  <span class="node-type">${node.type}</span>
+                </span>
+              </span>
+              <p class="node-summary">${node.summary}</p>
+            `;
+            button.addEventListener("click", () => selectNode(node.id));
+            rowElement.appendChild(button);
+          });
+          nodeMap.appendChild(rowElement);
+        });
+      }
+
+      function selectNode(id) {
+        const node = nodes.find((item) => item.id === id) || nodes[0];
+        document.querySelectorAll(".node-button").forEach((button) => {
+          button.classList.toggle("active", button.dataset.nodeId === node.id);
+        });
+        detailTitle.textContent = node.title;
+        detailSummary.textContent = `${node.type}: ${node.summary}`;
+        detailResponsibilities.innerHTML = node.responsibilities
+          .map((item) => `<li>${item}</li>`)
+          .join("");
+        detailSources.innerHTML = node.sources.map((item) => `<li>${item}</li>`).join("");
+        detailNotes.textContent = node.notes;
+      }
+
+      function renderScenarios() {
+        scenarioList.innerHTML = scenarios
+          .map(
+            (scenario) => `
+              <button class="scenario-button" type="button" data-scenario="${scenario.id}">
+                <strong>${scenario.title}</strong>
+              </button>
+            `,
+          )
+          .join("");
+        scenarioList.querySelectorAll("button").forEach((button) => {
+          button.addEventListener("click", () => selectScenario(button.dataset.scenario));
+        });
+      }
+
+      function selectScenario(id) {
+        const scenario = scenarios.find((item) => item.id === id) || scenarios[0];
+        scenarioList.querySelectorAll("button").forEach((button) => {
+          button.classList.toggle("active", button.dataset.scenario === scenario.id);
+        });
+        timeline.innerHTML = scenario.steps
+          .map(
+            (step, index) => `
+              <article class="step">
+                <span class="step-number">${index + 1}</span>
+                <div>
+                  <h3>${step.title}</h3>
+                  <p>${step.text}</p>
+                </div>
+              </article>
+            `,
+          )
+          .join("");
+      }
+
+      function renderModules() {
+        modulesGrid.innerHTML = modules
+          .map(
+            (module) => `
+              <article class="module" data-search-text="${[
+                module.title,
+                module.body,
+                ...module.tags,
+              ]
+                .join(" ")
+                .toLowerCase()}">
+                <h3><span class="swatch swatch-${module.accent}" aria-hidden="true"></span>${module.title}</h3>
+                <p>${module.body}</p>
+                <div class="module-foot">
+                  ${module.tags.map((tag) => `<button class="mini-button" type="button">${tag}</button>`).join("")}
+                </div>
+              </article>
+            `,
+          )
+          .join("");
+        modulesGrid.querySelectorAll(".mini-button").forEach((button) => {
+          button.addEventListener("click", () => {
+            search.value = button.textContent;
+            applySearch();
+            activateTab("modules");
+          });
+        });
+      }
+
+      function renderModes() {
+        modeLayout.innerHTML = modes
+          .map(
+            (mode) => `
+              <article class="mode" data-search-text="${[mode.title, mode.body, ...mode.steps]
+                .join(" ")
+                .toLowerCase()}">
+                <h2>${mode.title}</h2>
+                <p>${mode.body}</p>
+                <ol>
+                  ${mode.steps.map((step) => `<li>${step}</li>`).join("")}
+                </ol>
+              </article>
+            `,
+          )
+          .join("");
+      }
+
+      function activateTab(id) {
+        document.querySelectorAll(".tab-button").forEach((button) => {
+          const isActive = button.dataset.tab === id;
+          button.setAttribute("aria-selected", String(isActive));
+        });
+        document.querySelectorAll(".panel").forEach((panel) => {
+          panel.classList.toggle("active", panel.id === id);
+        });
+      }
+
+      function applySearch() {
+        const query = search.value.trim().toLowerCase();
+        document.querySelectorAll("[data-search-text]").forEach((element) => {
+          const matches = !query || element.dataset.searchText.includes(query);
+          element.classList.toggle("hidden-by-search", !matches);
+        });
+      }
+
+      document.querySelectorAll(".tab-button").forEach((button) => {
+        button.addEventListener("click", () => activateTab(button.dataset.tab));
+      });
+
+      search.addEventListener("input", applySearch);
+
+      renderNodes();
+      renderScenarios();
+      renderModules();
+      renderModes();
+      selectNode("web");
+      selectScenario("prompt");
+    </script>
+  </body>
+</html>
