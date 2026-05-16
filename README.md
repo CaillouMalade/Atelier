@@ -2,9 +2,51 @@
 
 Atelier is a local-first workbench for running coding agents against real projects. It combines a chat timeline, terminal, source control tools, workspace file browsing, artifacts, an embedded web pane, and a live Markdown scratchpad into one desktop/web UI.
 
-The codebase is an early private fork of T3 Code. The user-facing desktop app is branded **Atelier**, while some internal package names, env vars, state directories, and the CLI are still inherited from upstream (`t3`, `@t3tools/*`, `T3CODE_*`, `~/.t3`). Treat those names as current implementation details until the rebrand is finished.
+## Read This First
 
-## Current Status
+This repository is in the middle of a product fork/rebrand. Do not assume every
+old name in the tree is stale, and do not assume every new name has been migrated
+all the way down.
+
+The current user-facing product is **Atelier**.
+
+The current backend/CLI/package internals are still mostly inherited from
+upstream T3 Code:
+
+- CLI command: `t3`
+- npm package: `t3`
+- workspace package scope: `@t3tools/*`
+- environment variable prefix: `T3CODE_*`
+- default state directory: `~/.t3`
+- some app IDs, artifact names, update metadata, tests, and compatibility paths
+
+These inherited names are intentional for now. They should not be renamed in a
+drive-by cleanup. Renaming them safely requires compatibility aliases,
+migration logic, update-path review, packaging review, and test updates.
+
+When docs or code disagree, use this rule:
+
+1. User-facing desktop/web product name: **Atelier**.
+2. Runtime/backend implementation name: often still `t3`.
+3. Legacy upstream references in tests or compatibility paths may be correct.
+4. `apps/marketing` is inherited upstream marketing content and is not current
+   Atelier product copy.
+5. Release/distribution docs are inherited and must be reviewed before public
+   Atelier distribution.
+
+## What Not To Break
+
+- Do not blindly replace `t3`, `@t3tools`, `T3CODE`, or `~/.t3`.
+- Do not treat `apps/marketing` as authoritative product messaging.
+- Do not change release domains, app IDs, package names, artifact names, or
+  updater metadata without checking the packaging/release flow.
+- Do not remove legacy T3 Code state-path handling; it may preserve existing
+  user data.
+- Do not assume a doc that mentions `t3` is wrong. The CLI is still named `t3`.
+
+## Current Product Truth
+
+Atelier currently means:
 
 - Private, early-stage app, not a polished public release.
 - Desktop product name: `Atelier`.
@@ -12,7 +54,6 @@ The codebase is an early private fork of T3 Code. The user-facing desktop app is
 - Built-in agent drivers: Codex, Claude Code, Cursor Agent, and OpenCode.
 - Cursor support is marked early access in the UI.
 - Public package managers and upstream release links are not the source of truth for this fork.
-- `apps/marketing` is inherited upstream marketing content and is not current Atelier product copy.
 
 ## What Is In The App
 
