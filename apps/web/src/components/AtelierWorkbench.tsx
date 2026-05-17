@@ -268,6 +268,10 @@ function isImagePath(path: string): boolean {
   return [".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif"].includes(extensionOf(path));
 }
 
+function isPdfPath(path: string): boolean {
+  return extensionOf(path) === ".pdf";
+}
+
 function isJsonPath(path: string): boolean {
   return extensionOf(path) === ".json";
 }
@@ -586,12 +590,13 @@ export function AtelierWorkspaceDrawer(props: {
     () => new Set(["src", "apps", "packages", ".docs", "docs"]),
   );
 
+  const trimmedWorkspaceQuery = workspaceQuery.trim();
   const workspaceEntriesQuery = useQuery(
     projectSearchEntriesQueryOptions({
       environmentId: thread?.environmentId ?? null,
       cwd: activeCwd,
-      query: workspaceQuery.trim().length > 0 ? workspaceQuery.trim() : ".",
-      limit: 180,
+      query: trimmedWorkspaceQuery.length > 0 ? trimmedWorkspaceQuery : ".",
+      limit: trimmedWorkspaceQuery.length > 0 ? 180 : 5000,
       enabled: props.open && Boolean(thread?.environmentId && activeCwd),
     }),
   );
@@ -1110,7 +1115,7 @@ function WorkbenchPane(props: {
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-border/60 first:border-l-0">
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-card px-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {props.pane.tabIds.map((tabId) => {
             const tab = props.tabById.get(tabId);
             if (!tab) return null;
@@ -1120,7 +1125,7 @@ function WorkbenchPane(props: {
               <div
                 key={tabId}
                 className={cn(
-                  "group inline-flex h-7 min-w-0 max-w-36 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs transition-colors",
+                  "group inline-flex h-6 min-w-0 max-w-36 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs transition-colors",
                   selected
                     ? "bg-background text-foreground shadow-sm ring-1 ring-border"
                     : "text-muted-foreground hover:bg-background/65 hover:text-foreground",
@@ -1465,6 +1470,75 @@ function WorkbenchPanelShell(props: {
   );
 }
 
+type FileBadgeSpec = { readonly label: string; readonly className: string };
+
+const FILE_BADGE_BY_EXT: Readonly<Record<string, FileBadgeSpec>> = {
+  ts: { label: "TS", className: "bg-blue-500/15 text-blue-500" },
+  tsx: { label: "TS", className: "bg-blue-500/15 text-blue-500" },
+  mts: { label: "TS", className: "bg-blue-500/15 text-blue-500" },
+  cts: { label: "TS", className: "bg-blue-500/15 text-blue-500" },
+  js: { label: "JS", className: "bg-amber-500/15 text-amber-600" },
+  jsx: { label: "JS", className: "bg-amber-500/15 text-amber-600" },
+  mjs: { label: "JS", className: "bg-amber-500/15 text-amber-600" },
+  cjs: { label: "JS", className: "bg-amber-500/15 text-amber-600" },
+  json: { label: "JS", className: "bg-amber-500/15 text-amber-600" },
+  md: { label: "MD", className: "bg-slate-500/15 text-slate-500" },
+  mdx: { label: "MD", className: "bg-slate-500/15 text-slate-500" },
+  html: { label: "HTM", className: "bg-orange-500/15 text-orange-500" },
+  htm: { label: "HTM", className: "bg-orange-500/15 text-orange-500" },
+  css: { label: "CSS", className: "bg-cyan-500/15 text-cyan-500" },
+  scss: { label: "CSS", className: "bg-cyan-500/15 text-cyan-500" },
+  sass: { label: "CSS", className: "bg-cyan-500/15 text-cyan-500" },
+  pdf: { label: "PDF", className: "bg-red-500/15 text-red-500" },
+  png: { label: "IMG", className: "bg-pink-500/15 text-pink-500" },
+  jpg: { label: "IMG", className: "bg-pink-500/15 text-pink-500" },
+  jpeg: { label: "IMG", className: "bg-pink-500/15 text-pink-500" },
+  gif: { label: "IMG", className: "bg-pink-500/15 text-pink-500" },
+  webp: { label: "IMG", className: "bg-pink-500/15 text-pink-500" },
+  avif: { label: "IMG", className: "bg-pink-500/15 text-pink-500" },
+  ico: { label: "IMG", className: "bg-pink-500/15 text-pink-500" },
+  svg: { label: "SVG", className: "bg-pink-500/15 text-pink-500" },
+  yml: { label: "YML", className: "bg-violet-500/15 text-violet-500" },
+  yaml: { label: "YML", className: "bg-violet-500/15 text-violet-500" },
+  toml: { label: "TML", className: "bg-violet-500/15 text-violet-500" },
+  py: { label: "PY", className: "bg-emerald-500/15 text-emerald-600" },
+  go: { label: "GO", className: "bg-sky-500/15 text-sky-500" },
+  rs: { label: "RS", className: "bg-orange-500/15 text-orange-600" },
+  sh: { label: "SH", className: "bg-zinc-500/15 text-zinc-500" },
+  bash: { label: "SH", className: "bg-zinc-500/15 text-zinc-500" },
+  zsh: { label: "SH", className: "bg-zinc-500/15 text-zinc-500" },
+  lock: { label: "LK", className: "bg-zinc-500/15 text-zinc-500" },
+  txt: { label: "TXT", className: "bg-zinc-500/15 text-zinc-500" },
+  env: { label: "ENV", className: "bg-yellow-500/15 text-yellow-600" },
+};
+
+function getFileBadge(name: string): FileBadgeSpec | null {
+  const lower = name.toLowerCase();
+  const dot = lower.lastIndexOf(".");
+  if (dot <= 0) return null;
+  const ext = lower.slice(dot + 1);
+  return FILE_BADGE_BY_EXT[ext] ?? null;
+}
+
+function FileTypeBadge({ name }: { name: string }) {
+  const badge = getFileBadge(name);
+  if (!badge) {
+    return <FileIcon className="size-3.5 shrink-0 text-muted-foreground/70" />;
+  }
+  return (
+    <span
+      className={cn(
+        "flex size-4 shrink-0 items-center justify-center rounded-sm font-semibold leading-none tracking-tight",
+        badge.label.length >= 3 ? "text-[8px]" : "text-[9px]",
+        badge.className,
+      )}
+      aria-hidden
+    >
+      {badge.label}
+    </span>
+  );
+}
+
 function WorkspacePanel(props: {
   project: Project | undefined;
   activeCwd: string | null;
@@ -1566,7 +1640,7 @@ function WorkspacePanel(props: {
                   {isDirectory ? (
                     <FolderIcon className="size-3.5 shrink-0" />
                   ) : (
-                    <FileIcon className="size-3.5 shrink-0" />
+                    <FileTypeBadge name={node.name} />
                   )}
                   <span className="min-w-0 flex-1 truncate">{node.name}</span>
                   {!isDirectory ? (
@@ -1935,6 +2009,19 @@ function FilePreviewSurface(props: {
             className="max-h-full max-w-full rounded-md object-contain"
           />
         </div>
+      );
+    }
+  }
+
+  if (isPdfPath(props.file.relativePath)) {
+    const dataUrl = dataUrlForFile(props.file);
+    if (dataUrl) {
+      return (
+        <iframe
+          title={props.file.relativePath}
+          src={dataUrl}
+          className="h-full w-full border-0 bg-background"
+        />
       );
     }
   }

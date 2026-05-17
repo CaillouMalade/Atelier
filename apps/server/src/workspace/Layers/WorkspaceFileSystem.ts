@@ -50,6 +50,7 @@ const MIME_TYPE_BY_EXTENSION = new Map<string, string>([
   [".json", "application/json"],
   [".md", "text/markdown"],
   [".mdx", "text/markdown"],
+  [".pdf", "application/pdf"],
   [".png", "image/png"],
   [".svg", "image/svg+xml"],
   [".ts", "text/typescript"],

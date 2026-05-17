@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 import { NonNegativeInt, PositiveInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
-const PROJECT_SEARCH_ENTRIES_MAX_LIMIT = 200;
+const PROJECT_SEARCH_ENTRIES_MAX_LIMIT = 10_000;
 const PROJECT_READ_FILE_PATH_MAX_LENGTH = 512;
 const PROJECT_WRITE_FILE_PATH_MAX_LENGTH = 512;
 
