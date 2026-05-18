@@ -19,14 +19,32 @@ export interface PersistedUiState {
   collapsedProjectCwds?: string[];
   expandedProjectCwds?: string[];
   projectOrderCwds?: string[];
+  pinnedProjectIds?: string[];
+  projectAppearanceById?: Record<string, ProjectAppearance>;
   defaultAdvertisedEndpointKey?: string | null;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
   workspaceFileDrawerOpen?: boolean;
 }
 
+export type ProjectAppearanceIcon = "folder" | "code" | "server" | "book" | "sparkles" | "globe";
+export type ProjectAppearanceColor =
+  | "slate"
+  | "emerald"
+  | "sky"
+  | "violet"
+  | "amber"
+  | "rose";
+
+export interface ProjectAppearance {
+  icon: ProjectAppearanceIcon;
+  color: ProjectAppearanceColor;
+}
+
 export interface UiProjectState {
   projectExpandedById: Record<string, boolean>;
   projectOrder: string[];
+  pinnedProjectIds: string[];
+  projectAppearanceById: Record<string, ProjectAppearance>;
 }
 
 export interface UiThreadState {
@@ -60,6 +78,8 @@ export interface SyncThreadInput {
 const initialState: UiState = {
   projectExpandedById: {},
   projectOrder: [],
+  pinnedProjectIds: [],
+  projectAppearanceById: {},
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},
   defaultAdvertisedEndpointKey: null,
@@ -105,6 +125,8 @@ function readPersistedState(): UiState {
         parsed.defaultAdvertisedEndpointKey.length > 0
           ? parsed.defaultAdvertisedEndpointKey
           : null,
+      pinnedProjectIds: sanitizePersistedPinnedProjectIds(parsed.pinnedProjectIds),
+      projectAppearanceById: sanitizePersistedProjectAppearance(parsed.projectAppearanceById),
       threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
         parsed.threadChangedFilesExpandedById,
       ),
@@ -113,6 +135,69 @@ function readPersistedState(): UiState {
   } catch {
     return initialState;
   }
+}
+
+function isProjectAppearanceIcon(value: unknown): value is ProjectAppearanceIcon {
+  return (
+    value === "folder" ||
+    value === "code" ||
+    value === "server" ||
+    value === "book" ||
+    value === "sparkles" ||
+    value === "globe"
+  );
+}
+
+function isProjectAppearanceColor(value: unknown): value is ProjectAppearanceColor {
+  return (
+    value === "slate" ||
+    value === "emerald" ||
+    value === "sky" ||
+    value === "violet" ||
+    value === "amber" ||
+    value === "rose"
+  );
+}
+
+function sanitizePersistedPinnedProjectIds(value: PersistedUiState["pinnedProjectIds"]): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const projectId of value) {
+    if (typeof projectId !== "string" || projectId.length === 0 || seen.has(projectId)) {
+      continue;
+    }
+    seen.add(projectId);
+    result.push(projectId);
+  }
+  return result;
+}
+
+function sanitizePersistedProjectAppearance(
+  value: PersistedUiState["projectAppearanceById"],
+): Record<string, ProjectAppearance> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+  const result: Record<string, ProjectAppearance> = {};
+  for (const [projectId, appearance] of Object.entries(value)) {
+    if (
+      !projectId ||
+      !appearance ||
+      typeof appearance !== "object" ||
+      !isProjectAppearanceIcon((appearance as Partial<ProjectAppearance>).icon) ||
+      !isProjectAppearanceColor((appearance as Partial<ProjectAppearance>).color)
+    ) {
+      continue;
+    }
+    result[projectId] = {
+      icon: (appearance as ProjectAppearance).icon,
+      color: (appearance as ProjectAppearance).color,
+    };
+  }
+  return result;
 }
 
 function sanitizePersistedThreadChangedFilesExpanded(
@@ -197,6 +282,8 @@ export function persistState(state: UiState): void {
         collapsedProjectCwds,
         expandedProjectCwds,
         projectOrderCwds,
+        pinnedProjectIds: state.pinnedProjectIds,
+        projectAppearanceById: state.projectAppearanceById,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
         threadChangedFilesExpandedById,
         workspaceFileDrawerOpen: state.workspaceFileDrawerOpen,
@@ -233,6 +320,24 @@ function projectOrdersEqual(left: readonly string[], right: readonly string[]): 
   return (
     left.length === right.length && left.every((projectId, index) => projectId === right[index])
   );
+}
+
+function projectAppearancesEqual(
+  left: Record<string, ProjectAppearance>,
+  right: Record<string, ProjectAppearance>,
+): boolean {
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+  if (leftEntries.length !== rightEntries.length) {
+    return false;
+  }
+  for (const [key, value] of leftEntries) {
+    const rightValue = right[key];
+    if (!rightValue || rightValue.icon !== value.icon || rightValue.color !== value.color) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function nestedBooleanRecordsEqual(
@@ -387,10 +492,23 @@ export function syncProjects(state: UiState, projects: readonly SyncProjectInput
             return left.incomingIndex - right.incomingIndex;
           })
           .map((project) => project.id);
+  const currentLogicalProjectIds = new Set(projects.map((project) => project.logicalKey));
+  const previousPinnedProjectIds = state.pinnedProjectIds ?? [];
+  const previousProjectAppearanceById = state.projectAppearanceById ?? {};
+  const nextPinnedProjectIds = previousPinnedProjectIds.filter((projectId) =>
+    currentLogicalProjectIds.has(projectId),
+  );
+  const nextProjectAppearanceById = Object.fromEntries(
+    Object.entries(previousProjectAppearanceById).filter(([projectId]) =>
+      currentLogicalProjectIds.has(projectId),
+    ),
+  );
 
   if (
     recordsEqual(state.projectExpandedById, nextExpandedById) &&
     projectOrdersEqual(state.projectOrder, nextProjectOrder) &&
+    projectOrdersEqual(previousPinnedProjectIds, nextPinnedProjectIds) &&
+    projectAppearancesEqual(previousProjectAppearanceById, nextProjectAppearanceById) &&
     !cwdMappingChanged
   ) {
     return state;
@@ -400,6 +518,8 @@ export function syncProjects(state: UiState, projects: readonly SyncProjectInput
     ...state,
     projectExpandedById: nextExpandedById,
     projectOrder: nextProjectOrder,
+    pinnedProjectIds: nextPinnedProjectIds,
+    projectAppearanceById: nextProjectAppearanceById,
   };
 }
 
@@ -597,6 +717,37 @@ export function setProjectExpanded(state: UiState, projectId: string, expanded: 
   };
 }
 
+export function setProjectPinned(state: UiState, projectId: string, pinned: boolean): UiState {
+  const isPinned = state.pinnedProjectIds.includes(projectId);
+  if (isPinned === pinned) {
+    return state;
+  }
+  return {
+    ...state,
+    pinnedProjectIds: pinned
+      ? [...state.pinnedProjectIds, projectId]
+      : state.pinnedProjectIds.filter((currentProjectId) => currentProjectId !== projectId),
+  };
+}
+
+export function setProjectAppearance(
+  state: UiState,
+  projectId: string,
+  appearance: ProjectAppearance,
+): UiState {
+  const current = state.projectAppearanceById[projectId];
+  if (current?.icon === appearance.icon && current.color === appearance.color) {
+    return state;
+  }
+  return {
+    ...state,
+    projectAppearanceById: {
+      ...state.projectAppearanceById,
+      [projectId]: appearance,
+    },
+  };
+}
+
 export function reorderProjects(
   state: UiState,
   draggedProjectIds: readonly string[],
@@ -651,6 +802,8 @@ interface UiStateStore extends UiState {
   setWorkspaceFileDrawerOpen: (open: boolean) => void;
   toggleProject: (projectId: string) => void;
   setProjectExpanded: (projectId: string, expanded: boolean) => void;
+  setProjectPinned: (projectId: string, pinned: boolean) => void;
+  setProjectAppearance: (projectId: string, appearance: ProjectAppearance) => void;
   reorderProjects: (
     draggedProjectIds: readonly string[],
     targetProjectIds: readonly string[],
@@ -674,6 +827,10 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
   toggleProject: (projectId) => set((state) => toggleProject(state, projectId)),
   setProjectExpanded: (projectId, expanded) =>
     set((state) => setProjectExpanded(state, projectId, expanded)),
+  setProjectPinned: (projectId, pinned) =>
+    set((state) => setProjectPinned(state, projectId, pinned)),
+  setProjectAppearance: (projectId, appearance) =>
+    set((state) => setProjectAppearance(state, projectId, appearance)),
   reorderProjects: (draggedProjectIds, targetProjectIds) =>
     set((state) => reorderProjects(state, draggedProjectIds, targetProjectIds)),
 }));

@@ -79,10 +79,10 @@ up the codebase can see them.
 - [x] **Keyboard shortcut to collapse the right sidebar.** There is currently
   no shortcut for this. Pick a binding consistent with the existing
   sidebar/keybindings convention (see `KEYBINDINGS.md`).
-- [ ] **Allow project icon and color customization.** Bare minimum for
+- [x] **Allow project icon and color customization.** Bare minimum for
   organizing projects: let users choose a project icon and color. Use a good
   icon set, not emoji.
-- [ ] **Consider project pinning and folders.** Pinning projects and creating
+- [x] **Consider project pinning and folders.** Pinning projects and creating
   folders for projects would help organize many projects. Only do this if the
   UI can stay simple and clean; skip it if it would make the project list
   feel busy or overbuilt.
@@ -111,14 +111,26 @@ up the codebase can see them.
   `mod+shift+b`, and is documented in `KEYBINDINGS.md`.
 - Desktop window, left sidebar, main content, and workbench minimum widths were
   lowered so the app can compress much more than before.
+- Project rows have subtle boxed grouping for better scanability with many
+  projects.
+- Projects can be pinned from the sidebar context menu. Pinned projects float
+  above the current sort order.
+- Projects can be customized with a persisted lucide icon and color from the
+  sidebar context menu.
+- Arbitrary project folders were intentionally skipped: the lighter
+  icon/color/pinning treatment solved the legibility issue without making the
+  project list feel busy.
 
 Verification:
 
 - Arthur manually checked the dev app and confirmed the implemented items work
   as expected.
+- Arthur manually checked the project sidebar legibility treatment and
+  confirmed project folders are not needed.
 - Arthur manually checked PDF/artifact switching across chats, source-control
   pull visibility, workspace file add via buttons/drag-and-drop, and the
   configurable right-workbench shortcut.
+- `bun --cwd apps/web test src/uiStateStore.test.ts`
 - `bun --cwd apps/web test src/components/GitActionsControl.logic.test.ts`
 - `bunx vitest run apps/server/src/workspace/Layers/WorkspaceFileSystem.test.ts apps/server/src/keybindings.test.ts`
 - `bunx vitest run apps/server/src/server.test.ts`

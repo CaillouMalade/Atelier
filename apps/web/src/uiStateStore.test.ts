@@ -10,8 +10,10 @@ import {
   type PersistedUiState,
   persistState,
   reorderProjects,
+  setProjectAppearance,
   setDefaultAdvertisedEndpointKey,
   setProjectExpanded,
+  setProjectPinned,
   setThreadChangedFilesExpanded,
   syncProjects,
   syncThreads,
@@ -22,6 +24,8 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
     projectExpandedById: {},
     projectOrder: [],
+    pinnedProjectIds: [],
+    projectAppearanceById: {},
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
     defaultAdvertisedEndpointKey: null,
@@ -232,6 +236,30 @@ describe("uiStateStore pure functions", () => {
 
     expect(next.projectOrder).toEqual([project2, project1, project3]);
     expect(next.projectExpandedById[project2]).toBe(false);
+  });
+
+  it("setProjectPinned toggles a project in the pinned list", () => {
+    const initialState = makeUiState();
+
+    const pinned = setProjectPinned(initialState, "project-a", true);
+    const unpinned = setProjectPinned(pinned, "project-a", false);
+
+    expect(pinned.pinnedProjectIds).toEqual(["project-a"]);
+    expect(unpinned.pinnedProjectIds).toEqual([]);
+  });
+
+  it("setProjectAppearance stores sidebar icon and color metadata", () => {
+    const initialState = makeUiState();
+
+    const next = setProjectAppearance(initialState, "project-a", {
+      icon: "server",
+      color: "emerald",
+    });
+
+    expect(next.projectAppearanceById["project-a"]).toEqual({
+      icon: "server",
+      color: "emerald",
+    });
   });
 
   it("syncProjects preserves manual order across project id churn at the same cwd", () => {

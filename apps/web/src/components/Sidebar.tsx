@@ -1,13 +1,21 @@
 import {
   ArchiveIcon,
   ArrowUpDownIcon,
+  BookOpenIcon,
+  Code2Icon,
   ChevronRightIcon,
   CloudIcon,
+  FolderIcon,
   FolderOpenIcon,
   FolderPlusIcon,
+  GlobeIcon,
+  PaletteIcon,
+  PinIcon,
   SearchIcon,
+  ServerIcon,
   SettingsIcon,
   SquarePenIcon,
+  SparklesIcon,
   TerminalIcon,
   TriangleAlertIcon,
 } from "lucide-react";
@@ -75,7 +83,12 @@ import {
   useStore,
 } from "../store";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
-import { useUiStateStore } from "../uiStateStore";
+import {
+  type ProjectAppearance,
+  type ProjectAppearanceColor,
+  type ProjectAppearanceIcon,
+  useUiStateStore,
+} from "../uiStateStore";
 import {
   resolveShortcutCommand,
   shortcutLabelForCommand,
@@ -217,6 +230,35 @@ const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> =
   repository_path: "Group by repository path",
   separate: "Keep separate",
 };
+const PROJECT_APPEARANCE_ICONS = [
+  { value: "folder", label: "Folder", Icon: FolderIcon },
+  { value: "code", label: "Code", Icon: Code2Icon },
+  { value: "server", label: "Server", Icon: ServerIcon },
+  { value: "book", label: "Notes", Icon: BookOpenIcon },
+  { value: "sparkles", label: "Creative", Icon: SparklesIcon },
+  { value: "globe", label: "Web", Icon: GlobeIcon },
+] as const satisfies ReadonlyArray<{
+  value: ProjectAppearanceIcon;
+  label: string;
+  Icon: typeof FolderIcon;
+}>;
+const PROJECT_APPEARANCE_COLORS = [
+  { value: "slate", label: "Slate", color: "#64748b", background: "#64748b1a" },
+  { value: "emerald", label: "Emerald", color: "#059669", background: "#0596691a" },
+  { value: "sky", label: "Sky", color: "#0284c7", background: "#0284c71a" },
+  { value: "violet", label: "Violet", color: "#7c3aed", background: "#7c3aed1a" },
+  { value: "amber", label: "Amber", color: "#d97706", background: "#d977061a" },
+  { value: "rose", label: "Rose", color: "#e11d48", background: "#e11d481a" },
+] as const satisfies ReadonlyArray<{
+  value: ProjectAppearanceColor;
+  label: string;
+  color: string;
+  background: string;
+}>;
+const DEFAULT_PROJECT_APPEARANCE: ProjectAppearance = {
+  icon: "folder",
+  color: "slate",
+};
 
 function clampSidebarThreadPreviewCount(value: number): SidebarThreadPreviewCount {
   return Math.min(
@@ -245,6 +287,43 @@ function projectGroupingModeDescription(mode: SidebarProjectGroupingMode): strin
     case "separate":
       return "Every project path gets its own sidebar row.";
   }
+}
+
+function getProjectAppearanceIcon(icon: ProjectAppearanceIcon): (typeof FolderIcon) {
+  return PROJECT_APPEARANCE_ICONS.find((option) => option.value === icon)?.Icon ?? FolderIcon;
+}
+
+function getProjectAppearanceColor(color: ProjectAppearanceColor) {
+  return (
+    PROJECT_APPEARANCE_COLORS.find((option) => option.value === color) ??
+    PROJECT_APPEARANCE_COLORS[0]
+  );
+}
+
+function ProjectAppearanceMark({
+  appearance,
+  environmentId,
+  cwd,
+}: {
+  appearance: ProjectAppearance | null;
+  environmentId: SidebarProjectSnapshot["environmentId"];
+  cwd: string;
+}) {
+  if (!appearance) {
+    return <ProjectFavicon environmentId={environmentId} cwd={cwd} />;
+  }
+
+  const Icon = getProjectAppearanceIcon(appearance.icon);
+  const color = getProjectAppearanceColor(appearance.color);
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex size-5 shrink-0 items-center justify-center rounded-md"
+      style={{ color: color.color, backgroundColor: color.background }}
+    >
+      <Icon className="size-3.5" />
+    </span>
+  );
 }
 
 function buildThreadJumpLabelMap(input: {
@@ -951,6 +1030,14 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const { isMobile, setOpenMobile } = useSidebar();
   const markThreadUnread = useUiStateStore((state) => state.markThreadUnread);
   const toggleProject = useUiStateStore((state) => state.toggleProject);
+  const projectAppearance = useUiStateStore(
+    (state) => state.projectAppearanceById[project.projectKey] ?? null,
+  );
+  const isProjectPinned = useUiStateStore((state) =>
+    state.pinnedProjectIds.includes(project.projectKey),
+  );
+  const setProjectPinned = useUiStateStore((state) => state.setProjectPinned);
+  const setProjectAppearance = useUiStateStore((state) => state.setProjectAppearance);
   const toggleThreadSelection = useThreadSelectionStore((state) => state.toggleThread);
   const rangeSelectTo = useThreadSelectionStore((state) => state.rangeSelectTo);
   const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
@@ -1069,6 +1156,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const [projectGroupingSelection, setProjectGroupingSelection] = useState<
     SidebarProjectGroupingMode | "inherit"
   >("inherit");
+  const [projectAppearanceDialogOpen, setProjectAppearanceDialogOpen] = useState(false);
+  const [projectAppearanceDraft, setProjectAppearanceDraft] = useState<ProjectAppearance>(
+    DEFAULT_PROJECT_APPEARANCE,
+  );
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const confirmArchiveButtonRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -1287,6 +1378,26 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     [projectGroupingSettings.sidebarProjectGroupingOverrides],
   );
 
+  const openProjectAppearanceDialog = useCallback(() => {
+    setProjectAppearanceDraft(projectAppearance ?? DEFAULT_PROJECT_APPEARANCE);
+    setProjectAppearanceDialogOpen(true);
+  }, [projectAppearance]);
+
+  const closeProjectAppearanceDialog = useCallback(() => {
+    setProjectAppearanceDialogOpen(false);
+    setProjectAppearanceDraft(DEFAULT_PROJECT_APPEARANCE);
+  }, []);
+
+  const saveProjectAppearance = useCallback(() => {
+    setProjectAppearance(project.projectKey, projectAppearanceDraft);
+    closeProjectAppearanceDialog();
+  }, [
+    closeProjectAppearanceDialog,
+    project.projectKey,
+    projectAppearanceDraft,
+    setProjectAppearance,
+  ]);
+
   const removeProject = useCallback(
     async (member: SidebarProjectGroupMember, options: { force?: boolean } = {}): Promise<void> => {
       const memberProjectRef = scopeProjectRef(member.environmentId, member.id);
@@ -1499,6 +1610,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
         const clicked = await api.contextMenu.show(
           [
+            {
+              id: isProjectPinned ? "unpin" : "pin",
+              label: isProjectPinned ? "Unpin project" : "Pin project",
+            },
+            { id: "appearance", label: "Customize appearance…" },
             buildTargetedItem("rename", "Rename project"),
             buildTargetedItem("grouping", "Project grouping…"),
             buildTargetedItem("copy-path", "Copy Project Path"),
@@ -1516,16 +1632,30 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           return;
         }
 
+        if (clicked === "pin" || clicked === "unpin") {
+          setProjectPinned(project.projectKey, clicked === "pin");
+          return;
+        }
+
+        if (clicked === "appearance") {
+          openProjectAppearanceDialog();
+          return;
+        }
+
         await actionHandlers.get(clicked)?.();
       })();
     },
     [
       copyPathToClipboard,
       handleRemoveProject,
+      isProjectPinned,
+      openProjectAppearanceDialog,
       openProjectGroupingDialog,
       openProjectRenameDialog,
       project.groupedProjectCount,
+      project.projectKey,
       project.memberProjects,
+      setProjectPinned,
       suppressProjectClickForContextMenuRef,
     ],
   );
@@ -1983,7 +2113,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         <SidebarMenuButton
           ref={isManualProjectSorting ? dragHandleProps?.setActivatorNodeRef : undefined}
           size="sm"
-          className={`gap-2 px-2 py-1.5 pr-8 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground max-sm:pr-14 ${
+          className={`gap-2 rounded-md px-2 py-1.5 pr-8 text-left hover:bg-accent/80 group-hover/project-header:bg-accent/70 group-hover/project-header:text-sidebar-accent-foreground max-sm:pr-14 ${
             isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
           }`}
           {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.attributes : {})}
@@ -2015,11 +2145,18 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               }`}
             />
           )}
-          <ProjectFavicon environmentId={project.environmentId} cwd={project.cwd} />
+          <ProjectAppearanceMark
+            appearance={projectAppearance}
+            environmentId={project.environmentId}
+            cwd={project.cwd}
+          />
           <span className="flex min-w-0 flex-1 items-center gap-2">
             <span className="truncate text-xs font-medium text-foreground/90">
               {project.displayName}
             </span>
+            {isProjectPinned ? (
+              <PinIcon className="size-3 shrink-0 fill-current text-muted-foreground/50" />
+            ) : null}
             {project.groupedProjectCount > 1 ? (
               <span className="shrink-0 text-[10px] text-muted-foreground/60">
                 {project.groupedProjectCount} projects
@@ -2157,6 +2294,98 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       </Dialog>
 
       <Dialog
+        open={projectAppearanceDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeProjectAppearanceDialog();
+          }
+        }}
+      >
+        <DialogPopup className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PaletteIcon className="size-4" />
+              Project appearance
+            </DialogTitle>
+            <DialogDescription>
+              Customize the sidebar marker for {project.displayName}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogPanel className="space-y-5">
+            <div className="grid gap-2">
+              <span className="text-xs font-medium text-foreground">Icon</span>
+              <div className="grid grid-cols-3 gap-2">
+                {PROJECT_APPEARANCE_ICONS.map((option) => {
+                  const selected = projectAppearanceDraft.icon === option.value;
+                  const Icon = option.Icon;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cn(
+                        "flex h-9 items-center gap-2 rounded-md border px-2 text-left text-xs transition-colors",
+                        selected
+                          ? "border-primary/45 bg-primary/10 text-foreground"
+                          : "border-border/60 bg-background hover:bg-accent/70",
+                      )}
+                      onClick={() =>
+                        setProjectAppearanceDraft((current) => ({
+                          ...current,
+                          icon: option.value,
+                        }))
+                      }
+                    >
+                      <Icon className="size-3.5 shrink-0" />
+                      <span className="truncate">{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <span className="text-xs font-medium text-foreground">Color</span>
+              <div className="grid grid-cols-3 gap-2">
+                {PROJECT_APPEARANCE_COLORS.map((option) => {
+                  const selected = projectAppearanceDraft.color === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cn(
+                        "flex h-9 items-center gap-2 rounded-md border px-2 text-left text-xs transition-colors",
+                        selected
+                          ? "border-primary/45 bg-primary/10 text-foreground"
+                          : "border-border/60 bg-background hover:bg-accent/70",
+                      )}
+                      onClick={() =>
+                        setProjectAppearanceDraft((current) => ({
+                          ...current,
+                          color: option.value,
+                        }))
+                      }
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: option.color }}
+                      />
+                      <span className="truncate">{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </DialogPanel>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeProjectAppearanceDialog}>
+              Cancel
+            </Button>
+            <Button onClick={saveProjectAppearance}>Save</Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
         open={projectGroupingTarget !== null}
         onOpenChange={(open) => {
           if (!open) {
@@ -2232,7 +2461,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
 const SidebarProjectListRow = memo(function SidebarProjectListRow(props: SidebarProjectItemProps) {
   return (
-    <SidebarMenuItem className="rounded-md">
+    <SidebarMenuItem className="mb-1 overflow-hidden rounded-lg border border-border/35 bg-background/35 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
       <SidebarProjectItem {...props} />
     </SidebarMenuItem>
   );
@@ -2429,7 +2658,7 @@ function SortableProjectItem({
         transform: CSS.Translate.toString(transform),
         transition,
       }}
-      className={`group/menu-item relative rounded-md ${
+      className={`group/menu-item relative mb-1 overflow-hidden rounded-lg border border-border/35 bg-background/35 shadow-[0_1px_0_rgba(0,0,0,0.02)] ${
         isDragging ? "z-20 opacity-80" : ""
       } ${isOver && !isDragging ? "ring-1 ring-primary/40" : ""}`}
       data-sidebar="menu-item"
@@ -2811,6 +3040,7 @@ export default function Sidebar() {
   const sidebarThreads = useStore(useShallow(selectSidebarThreadsAcrossEnvironments));
   const projectExpandedById = useUiStateStore((store) => store.projectExpandedById);
   const projectOrder = useUiStateStore((store) => store.projectOrder);
+  const pinnedProjectIds = useUiStateStore((store) => store.pinnedProjectIds);
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
   const workspaceFileDrawerOpen = useUiStateStore((store) => store.workspaceFileDrawerOpen);
   const setWorkspaceFileDrawerOpen = useUiStateStore((store) => store.setWorkspaceFileDrawerOpen);
@@ -3078,7 +3308,7 @@ export default function Sidebar() {
         projectId: (physicalToLogicalKey.get(physicalKey) ?? physicalKey) as ProjectId,
       };
     });
-    return sortProjectsForSidebar(
+    const sorted = sortProjectsForSidebar(
       sortableProjects,
       sortableThreads,
       sidebarProjectSortOrder,
@@ -3086,7 +3316,26 @@ export default function Sidebar() {
       const resolvedProject = sidebarProjectByKey.get(project.id);
       return resolvedProject ? [resolvedProject] : [];
     });
+    if (pinnedProjectIds.length === 0) {
+      return sorted;
+    }
+    const pinnedRank = new Map(pinnedProjectIds.map((projectId, index) => [projectId, index]));
+    return sorted.toSorted((left, right) => {
+      const leftPinnedRank = pinnedRank.get(left.projectKey);
+      const rightPinnedRank = pinnedRank.get(right.projectKey);
+      if (leftPinnedRank !== undefined && rightPinnedRank !== undefined) {
+        return leftPinnedRank - rightPinnedRank;
+      }
+      if (leftPinnedRank !== undefined) {
+        return -1;
+      }
+      if (rightPinnedRank !== undefined) {
+        return 1;
+      }
+      return 0;
+    });
   }, [
+    pinnedProjectIds,
     sidebarProjectSortOrder,
     physicalToLogicalKey,
     projectPhysicalKeyByScopedRef,
