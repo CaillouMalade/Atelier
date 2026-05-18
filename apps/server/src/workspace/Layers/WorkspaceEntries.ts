@@ -478,6 +478,9 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
   const search: WorkspaceEntriesShape["search"] = Effect.fn("WorkspaceEntries.search")(
     function* (input) {
       const normalizedCwd = yield* normalizeWorkspaceRoot(input.cwd);
+      if (input.refresh === true) {
+        yield* invalidate(normalizedCwd);
+      }
       return yield* Cache.get(workspaceIndexCache, normalizedCwd).pipe(
         Effect.map((index) => {
           const normalizedQuery = normalizeSearchQuery(input.query, {

@@ -338,6 +338,144 @@ export const OpenCodeSettings = makeProviderSettingsSchema(
 );
 export type OpenCodeSettings = typeof OpenCodeSettings.Type;
 
+export const HermesSettings = makeProviderSettingsSchema(
+  {
+    enabled: Schema.Boolean.pipe(
+      Schema.withDecodingDefault(Effect.succeed(true)),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    baseUrl: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("http://127.0.0.1:8642")),
+      Schema.annotateKey({
+        title: "Base URL",
+        description:
+          "Where the Hermes gateway is reachable. Local default is http://127.0.0.1:8642; for a remote agent use the Tailscale or LAN URL of the host running `hermes`.",
+        providerSettingsForm: {
+          placeholder: "http://127.0.0.1:8642",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    apiToken: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "API token",
+        description:
+          "Bearer token from the gateway's API_SERVER_KEY. Required for non-loopback URLs; optional when Hermes is bound to 127.0.0.1.",
+        providerSettingsForm: {
+          control: "password",
+          placeholder: "Optional for loopback",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    customModels: Schema.Array(Schema.String).pipe(
+      Schema.withDecodingDefault(Effect.succeed([])),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+  },
+  {
+    order: ["baseUrl", "apiToken"],
+  },
+);
+export type HermesSettings = typeof HermesSettings.Type;
+
+// Generic OpenAI-compatible HTTP backend. Works for Ollama, LM Studio,
+// OpenRouter, any /v1/chat/completions-speaking server — including Hermes
+// when you want a vanilla connection without the runs/responses extensions.
+export const OpenAiCompatibleSettings = makeProviderSettingsSchema(
+  {
+    enabled: Schema.Boolean.pipe(
+      Schema.withDecodingDefault(Effect.succeed(true)),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    baseUrl: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("http://127.0.0.1:11434")),
+      Schema.annotateKey({
+        title: "Base URL",
+        description:
+          "Root URL of the OpenAI-compatible server. Examples: Ollama http://127.0.0.1:11434, LM Studio http://127.0.0.1:1234, OpenRouter https://openrouter.ai/api, Hermes http://127.0.0.1:8642.",
+        providerSettingsForm: {
+          placeholder: "http://127.0.0.1:11434",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    apiToken: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "API token",
+        description:
+          "Bearer token used as `Authorization: Bearer <token>`. Required for hosted endpoints (OpenRouter, OpenAI); usually optional for localhost-only Ollama/LM Studio.",
+        providerSettingsForm: {
+          control: "password",
+          placeholder: "Optional for localhost",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    defaultModel: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "Default model",
+        description:
+          "Model id sent on requests when the thread doesn't override it. Leave blank to use the first model advertised on /v1/models.",
+        providerSettingsForm: {
+          placeholder: "llama3.2 / gpt-4o-mini / …",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    customModels: Schema.Array(Schema.String).pipe(
+      Schema.withDecodingDefault(Effect.succeed([])),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+  },
+  {
+    order: ["baseUrl", "apiToken", "defaultModel"],
+  },
+);
+export type OpenAiCompatibleSettings = typeof OpenAiCompatibleSettings.Type;
+
+// Hermes ACP driver — spawns `hermes acp` (or an alias) and pipes JSON-RPC
+// over stdio. Mirrors the Cursor ACP driver in shape.
+export const HermesAcpSettings = makeProviderSettingsSchema(
+  {
+    enabled: Schema.Boolean.pipe(
+      Schema.withDecodingDefault(Effect.succeed(false)),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    binaryPath: makeBinaryPathSetting("hermes").pipe(
+      Schema.annotateKey({
+        title: "Binary path",
+        description:
+          "Path to the `hermes` CLI (or an ACP wrapper). The driver invokes `<binaryPath> acp` and talks to it over stdio JSON-RPC.",
+        providerSettingsForm: { placeholder: "hermes", clearWhenEmpty: "omit" },
+      }),
+    ),
+    profile: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "Profile",
+        description:
+          "Optional Hermes profile name. When set the driver invokes `hermes -p <profile> acp` so each profile gets its own config / memory / skills.",
+        providerSettingsForm: {
+          placeholder: "default",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    customModels: Schema.Array(Schema.String).pipe(
+      Schema.withDecodingDefault(Effect.succeed([])),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+  },
+  {
+    order: ["binaryPath", "profile"],
+  },
+);
+export type HermesAcpSettings = typeof HermesAcpSettings.Type;
+
 export const ObservabilitySettings = Schema.Struct({
   otlpTracesUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   otlpMetricsUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
@@ -377,6 +515,9 @@ export const ServerSettings = Schema.Struct({
     claudeAgent: ClaudeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     opencode: OpenCodeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+    hermes: HermesSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+    "openai-compat": OpenAiCompatibleSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+    "hermes-acp": HermesAcpSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   }).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   // New driver-agnostic instance map. Keyed by `ProviderInstanceId`; values
   // are `ProviderInstanceConfig` envelopes. The driver-specific config blob
@@ -452,6 +593,28 @@ const OpenCodeSettingsPatch = Schema.Struct({
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+const HermesSettingsPatch = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  baseUrl: Schema.optionalKey(TrimmedString),
+  apiToken: Schema.optionalKey(TrimmedString),
+  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+
+const OpenAiCompatibleSettingsPatch = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  baseUrl: Schema.optionalKey(TrimmedString),
+  apiToken: Schema.optionalKey(TrimmedString),
+  defaultModel: Schema.optionalKey(TrimmedString),
+  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+
+const HermesAcpSettingsPatch = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  binaryPath: Schema.optionalKey(TrimmedString),
+  profile: Schema.optionalKey(TrimmedString),
+  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+
 export const ServerSettingsPatch = Schema.Struct({
   // Server settings
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
@@ -471,6 +634,9 @@ export const ServerSettingsPatch = Schema.Struct({
       claudeAgent: Schema.optionalKey(ClaudeSettingsPatch),
       cursor: Schema.optionalKey(CursorSettingsPatch),
       opencode: Schema.optionalKey(OpenCodeSettingsPatch),
+      hermes: Schema.optionalKey(HermesSettingsPatch),
+      "openai-compat": Schema.optionalKey(OpenAiCompatibleSettingsPatch),
+      "hermes-acp": Schema.optionalKey(HermesAcpSettingsPatch),
     }),
   ),
   // Whole-map replacement for the new instance config. Patching individual

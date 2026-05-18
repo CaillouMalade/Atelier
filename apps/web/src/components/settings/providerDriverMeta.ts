@@ -2,11 +2,14 @@ import {
   ClaudeSettings,
   CodexSettings,
   CursorSettings,
+  HermesAcpSettings,
+  HermesSettings,
+  OpenAiCompatibleSettings,
   OpenCodeSettings,
   ProviderDriverKind,
 } from "@t3tools/contracts";
 import type * as Schema from "effect/Schema";
-import { ClaudeAI, CursorIcon, type Icon, OpenAI, OpenCodeIcon } from "../Icons";
+import { ClaudeAI, CursorIcon, type Icon, OpenAI, OpenCodeIcon, PiAgentIcon } from "../Icons";
 
 type ProviderSettingsSchema = {
   readonly fields: Readonly<Record<string, Schema.Top>>;
@@ -58,6 +61,27 @@ export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = 
     label: "OpenCode",
     icon: OpenCodeIcon,
     settingsSchema: OpenCodeSettings,
+  },
+  {
+    value: ProviderDriverKind.make("hermes"),
+    label: "Hermes",
+    icon: PiAgentIcon,
+    badgeLabel: "Early Access",
+    settingsSchema: HermesSettings,
+  },
+  {
+    value: ProviderDriverKind.make("hermes-acp"),
+    label: "Hermes (ACP)",
+    icon: PiAgentIcon,
+    badgeLabel: "Early Access",
+    settingsSchema: HermesAcpSettings,
+  },
+  {
+    value: ProviderDriverKind.make("openai-compat"),
+    label: "OpenAI-compatible",
+    icon: OpenAI,
+    badgeLabel: "Early Access",
+    settingsSchema: OpenAiCompatibleSettings,
   },
 ];
 

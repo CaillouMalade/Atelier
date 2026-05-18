@@ -1300,6 +1300,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
                 "claudeAgent",
                 "codex",
                 "cursor",
+                "hermes",
+                "hermes-acp",
+                "openai-compat",
                 "opencode",
               ]);
               assert.strictEqual(cursorProvider?.enabled, false);

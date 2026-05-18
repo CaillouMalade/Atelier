@@ -13,7 +13,9 @@ export const projectQueryKeys = {
     cwd: string | null,
     query: string,
     limit: number,
-  ) => ["projects", "search-entries", environmentId ?? null, cwd, query, limit] as const,
+    refreshToken = 0,
+  ) =>
+    ["projects", "search-entries", environmentId ?? null, cwd, query, limit, refreshToken] as const,
   readFile: (environmentId: EnvironmentId | null, cwd: string | null, relativePath: string) =>
     ["projects", "read-file", environmentId ?? null, cwd, relativePath] as const,
 };
@@ -39,11 +41,19 @@ export function projectSearchEntriesQueryOptions(input: {
   query: string;
   enabled?: boolean;
   limit?: number;
+  refresh?: boolean;
+  refreshToken?: number;
   staleTime?: number;
 }) {
   const limit = input.limit ?? DEFAULT_SEARCH_ENTRIES_LIMIT;
   return queryOptions({
-    queryKey: projectQueryKeys.searchEntries(input.environmentId, input.cwd, input.query, limit),
+    queryKey: projectQueryKeys.searchEntries(
+      input.environmentId,
+      input.cwd,
+      input.query,
+      limit,
+      input.refreshToken ?? 0,
+    ),
     queryFn: async () => {
       if (!input.cwd || !input.environmentId) {
         throw new Error("Workspace entry search is unavailable.");
@@ -53,6 +63,7 @@ export function projectSearchEntriesQueryOptions(input: {
         cwd: input.cwd,
         query: input.query,
         limit,
+        ...(input.refresh === true ? { refresh: true } : {}),
       });
     },
     enabled:

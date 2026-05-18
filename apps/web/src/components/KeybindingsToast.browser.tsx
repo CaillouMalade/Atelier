@@ -130,6 +130,25 @@ function createBaseServerConfig(): ServerConfig {
           serverPassword: "",
           customModels: [],
         },
+        hermes: {
+          enabled: true,
+          baseUrl: "http://127.0.0.1:8642",
+          apiToken: "",
+          customModels: [],
+        },
+        "openai-compat": {
+          enabled: true,
+          baseUrl: "http://127.0.0.1:11434",
+          apiToken: "",
+          defaultModel: "",
+          customModels: [],
+        },
+        "hermes-acp": {
+          enabled: false,
+          binaryPath: "hermes",
+          profile: "",
+          customModels: [],
+        },
       },
     },
   };

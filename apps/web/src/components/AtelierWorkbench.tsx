@@ -147,12 +147,13 @@ interface WorkspaceTreeNode {
 }
 
 const WORKBENCH_WIDTH_STORAGE_KEY = "atelier:workbench-width";
+const WORKBENCH_EXPANDED_STORAGE_KEY = "atelier:workbench-expanded";
 const WORKBENCH_SCRATCH_STORAGE_PREFIX = "atelier:scratch:";
 const WORKBENCH_BROWSER_STORAGE_PREFIX = "atelier:browser:";
 const DEFAULT_WORKBENCH_WIDTH = 420;
-const MIN_WORKBENCH_WIDTH = 320;
+const MIN_WORKBENCH_WIDTH = 240;
 const FALLBACK_MAX_WORKBENCH_WIDTH = 760;
-const COMPACT_WORKBENCH_WIDTH = 276;
+const COMPACT_WORKBENCH_WIDTH = 220;
 const EMPTY_PROJECT_ENTRIES: readonly ProjectEntry[] = [];
 
 const DEFAULT_WORKBENCH_TABS: ReadonlyArray<WorkbenchSingletonTab> = [
@@ -208,6 +209,14 @@ function readStoredNumber(key: string, fallback: number): number {
   const raw = window.localStorage.getItem(key);
   const value = raw ? Number.parseInt(raw, 10) : Number.NaN;
   return Number.isFinite(value) ? value : fallback;
+}
+
+function readStoredBoolean(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  const raw = window.localStorage.getItem(key);
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  return fallback;
 }
 
 function basename(input: string): string {
@@ -432,7 +441,6 @@ interface ActivityOutputCandidate {
 
 function collectOutputCandidates(input: {
   thread: Thread | undefined;
-  changedFiles: ReadonlyArray<{ path: string; kind: string }>;
   activityFiles: readonly ActivityOutputCandidate[];
   turnDiffSummaries: readonly TurnDiffSummary[];
 }): OutputCandidate[] {
@@ -478,17 +486,6 @@ function collectOutputCandidates(input: {
     });
   }
 
-  for (const file of input.changedFiles) {
-    if (!isPreviewableOutputPath(file.path)) continue;
-    byPath.set(file.path, {
-      id: `working-tree:${file.path}`,
-      path: file.path,
-      title: basename(file.path),
-      subtitle: file.kind,
-      createdAt: new Date(0).toISOString(),
-      kind: "file",
-    });
-  }
   return [...byPath.values()].toSorted((left, right) =>
     right.createdAt.localeCompare(left.createdAt),
   );
@@ -586,6 +583,7 @@ export function AtelierWorkspaceDrawer(props: {
   );
   const activeCwd = thread?.worktreePath ?? activeProject?.cwd ?? null;
   const [workspaceQuery, setWorkspaceQuery] = useState("");
+  const [workspaceRefreshToken, setWorkspaceRefreshToken] = useState(0);
   const [openDirectories, setOpenDirectories] = useState<ReadonlySet<string>>(
     () => new Set(["src", "apps", "packages", ".docs", "docs"]),
   );
@@ -597,6 +595,8 @@ export function AtelierWorkspaceDrawer(props: {
       cwd: activeCwd,
       query: trimmedWorkspaceQuery.length > 0 ? trimmedWorkspaceQuery : ".",
       limit: trimmedWorkspaceQuery.length > 0 ? 180 : 5000,
+      refresh: workspaceRefreshToken > 0,
+      refreshToken: workspaceRefreshToken,
       enabled: props.open && Boolean(thread?.environmentId && activeCwd),
     }),
   );
@@ -627,7 +627,9 @@ export function AtelierWorkspaceDrawer(props: {
         activeCwd={activeCwd}
         query={workspaceQuery}
         onQueryChange={setWorkspaceQuery}
+        onRefresh={() => setWorkspaceRefreshToken((token) => token + 1)}
         isLoading={workspaceEntriesQuery.isFetching && workspaceEntries.length === 0}
+        isRefreshing={workspaceEntriesQuery.isFetching && workspaceEntries.length > 0}
         isError={workspaceEntriesQuery.isError}
         truncated={workspaceEntriesQuery.data?.truncated ?? false}
         rows={visibleTreeRows}
@@ -666,7 +668,9 @@ export function AtelierWorkbench({
   });
   const { turnDiffSummaries } = useTurnDiffSummaries(thread);
   const { width, onPointerDown } = useWorkbenchWidth();
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(() =>
+    readStoredBoolean(WORKBENCH_EXPANDED_STORAGE_KEY, true),
+  );
   const [tabById, setTabById] = useState<ReadonlyMap<WorkbenchTabId, WorkbenchTab>>(
     () => new Map(DEFAULT_WORKBENCH_TAB_MAP),
   );
@@ -691,10 +695,14 @@ export function AtelierWorkbench({
   const activeProviderLabel = thread?.modelSelection.instanceId ?? "provider";
   const activeModelLabel = thread?.modelSelection.model ?? "model";
   const outputCandidates = useMemo(
-    () => collectOutputCandidates({ thread, changedFiles, activityFiles, turnDiffSummaries }),
-    [activityFiles, changedFiles, thread, turnDiffSummaries],
+    () => collectOutputCandidates({ thread, activityFiles, turnDiffSummaries }),
+    [activityFiles, thread, turnDiffSummaries],
   );
   const outputCount = outputCandidates.length;
+
+  useEffect(() => {
+    window.localStorage.setItem(WORKBENCH_EXPANDED_STORAGE_KEY, String(expanded));
+  }, [expanded]);
 
   const activePaneId = panes.find((pane) => pane.activeTabId !== null)?.id ?? "primary";
 
@@ -1544,7 +1552,9 @@ function WorkspacePanel(props: {
   activeCwd: string | null;
   query: string;
   onQueryChange: (query: string) => void;
+  onRefresh: () => void;
   isLoading: boolean;
+  isRefreshing: boolean;
   isError: boolean;
   truncated: boolean;
   rows: ReadonlyArray<{ node: WorkspaceTreeNode; depth: number }>;
@@ -1559,17 +1569,36 @@ function WorkspacePanel(props: {
       subtitle={props.activeCwd ?? "Open or create a thread with a workspace"}
       icon={FolderOpenIcon}
       actions={
-        props.onClose ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            onClick={props.onClose}
-            aria-label="Close workspace file drawer"
-          >
-            <PanelRightCloseIcon />
-          </Button>
-        ) : null
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={props.onRefresh}
+                  aria-label="Refresh workspace files"
+                  disabled={!props.activeCwd || props.isRefreshing}
+                >
+                  <RefreshCwIcon className={cn(props.isRefreshing && "animate-spin")} />
+                </Button>
+              }
+            />
+            <TooltipPopup side="bottom">Refresh files</TooltipPopup>
+          </Tooltip>
+          {props.onClose ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              onClick={props.onClose}
+              aria-label="Close workspace file drawer"
+            >
+              <PanelRightCloseIcon />
+            </Button>
+          ) : null}
+        </div>
       }
     >
       <div className="shrink-0 border-b border-border p-3">

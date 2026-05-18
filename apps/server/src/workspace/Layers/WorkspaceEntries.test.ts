@@ -68,7 +68,12 @@ const git = (cwd: string, args: ReadonlyArray<string>, env?: NodeJS.ProcessEnv) 
     return result.stdout.trim();
   });
 
-const searchWorkspaceEntries = (input: { cwd: string; query: string; limit: number }) =>
+const searchWorkspaceEntries = (input: {
+  cwd: string;
+  query: string;
+  limit: number;
+  refresh?: boolean;
+}) =>
   Effect.gen(function* () {
     const workspaceEntries = yield* WorkspaceEntries;
     return yield* workspaceEntries.search(input);
@@ -121,6 +126,28 @@ it.layer(TestLayer)("WorkspaceEntriesLive", (it) => {
         expect(result.entries.every((entry) => entry.path.toLowerCase().includes("compo"))).toBe(
           true,
         );
+      }),
+    );
+
+    it.effect("refreshes the cached index when requested", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTempDir({ prefix: "t3code-workspace-refresh-" });
+        yield* writeTextFile(cwd, "src/first.ts");
+
+        const initial = yield* searchWorkspaceEntries({ cwd, query: "", limit: 100 });
+        expect(initial.entries.map((entry) => entry.path)).toContain("src/first.ts");
+
+        yield* writeTextFile(cwd, "src/second.ts");
+        const cached = yield* searchWorkspaceEntries({ cwd, query: "", limit: 100 });
+        expect(cached.entries.map((entry) => entry.path)).not.toContain("src/second.ts");
+
+        const refreshed = yield* searchWorkspaceEntries({
+          cwd,
+          query: "",
+          limit: 100,
+          refresh: true,
+        });
+        expect(refreshed.entries.map((entry) => entry.path)).toContain("src/second.ts");
       }),
     );
 

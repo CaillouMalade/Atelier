@@ -165,7 +165,7 @@ const make = Effect.gen(function* () {
     const window = yield* electronWindow.create({
       width: 1100,
       height: 780,
-      minWidth: 840,
+      minWidth: 260,
       minHeight: 620,
       show: false,
       autoHideMenuBar: true,
