@@ -1506,21 +1506,11 @@ export default function GitActionsControl({
     });
   };
 
-  const runQuickAction = () => {
-    if (quickAction.kind === "open_pr") {
-      void openExistingPr();
-      return;
-    }
-    if (quickAction.kind === "open_publish") {
-      setIsPublishDialogOpen(true);
-      return;
-    }
-    if (quickAction.kind === "run_pull") {
-      const promise = pullMutation.mutateAsync();
-      void toastManager.promise<
-        Awaited<ReturnType<typeof pullMutation.mutateAsync>>,
-        ThreadToastData
-      >(promise, {
+  const runPullWithToast = () => {
+    const promise = pullMutation.mutateAsync();
+    void toastManager.promise<Awaited<ReturnType<typeof pullMutation.mutateAsync>>, ThreadToastData>(
+      promise,
+      {
         loading: { title: "Pulling...", data: threadToastData },
         success: (result) => ({
           title: result.status === "pulled" ? "Pulled" : "Already up to date",
@@ -1535,8 +1525,22 @@ export default function GitActionsControl({
           description: err instanceof Error ? err.message : "An error occurred.",
           data: threadToastData,
         }),
-      });
-      void promise.catch(() => undefined);
+      },
+    );
+    void promise.catch(() => undefined);
+  };
+
+  const runQuickAction = () => {
+    if (quickAction.kind === "open_pr") {
+      void openExistingPr();
+      return;
+    }
+    if (quickAction.kind === "open_publish") {
+      setIsPublishDialogOpen(true);
+      return;
+    }
+    if (quickAction.kind === "run_pull") {
+      runPullWithToast();
       return;
     }
     if (quickAction.kind === "show_hint") {
@@ -1728,6 +1732,15 @@ export default function GitActionsControl({
                   </MenuItem>
                 );
               })}
+              {gitStatusForActions?.hasUpstream ? (
+                <MenuItem
+                  disabled={isGitActionRunning || gitStatusForActions.refName === null}
+                  onClick={runPullWithToast}
+                >
+                  <InfoIcon />
+                  Pull
+                </MenuItem>
+              ) : null}
               {canPublishRepository ? (
                 <MenuItem
                   disabled={isGitActionRunning}

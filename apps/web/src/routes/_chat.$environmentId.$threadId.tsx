@@ -152,8 +152,12 @@ function ChatThreadRouteView() {
 
   const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
   const openWorkspaceFile = (relativePath: string) => {
+    if (!currentThreadKey) {
+      return;
+    }
     setFileOpenRequest({
       relativePath,
+      threadKey: currentThreadKey,
       nonce: Date.now(),
       source: "workspace",
     });

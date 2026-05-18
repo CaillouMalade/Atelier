@@ -41,6 +41,7 @@ import {
   MinusIcon,
   PanelRightCloseIcon,
   PanelRightOpenIcon,
+  PlusIcon,
   RefreshCwIcon,
   Rows2Icon,
   SaveIcon,
@@ -51,6 +52,8 @@ import {
 } from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
+  type DragEvent as ReactDragEvent,
+  type ChangeEvent as ReactChangeEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -126,6 +129,7 @@ interface WorkbenchPaneState {
 export interface WorkspaceFileOpenRequest {
   readonly relativePath: string;
   readonly nonce: number;
+  readonly threadKey: string;
   readonly source?: "workspace" | "output";
 }
 
@@ -336,6 +340,29 @@ function dataUrlForFile(file: ProjectReadFileResult): string | null {
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(file.contents)}`;
   }
   return null;
+}
+
+function joinRelativePath(directory: string, name: string): string {
+  const trimmedDirectory = directory.replace(/^\/+|\/+$/g, "");
+  const trimmedName = name.replace(/^\/+/g, "");
+  return trimmedDirectory.length > 0 ? `${trimmedDirectory}/${trimmedName}` : trimmedName;
+}
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error(`Failed to read ${file.name}.`));
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error(`Failed to read ${file.name}.`));
+        return;
+      }
+      const commaIndex = result.indexOf(",");
+      resolve(commaIndex === -1 ? result : result.slice(commaIndex + 1));
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function sortWorkspaceTreeNodes(items: WorkspaceTreeNode[]) {
@@ -584,6 +611,10 @@ export function AtelierWorkspaceDrawer(props: {
   const activeCwd = thread?.worktreePath ?? activeProject?.cwd ?? null;
   const [workspaceQuery, setWorkspaceQuery] = useState("");
   const [workspaceRefreshToken, setWorkspaceRefreshToken] = useState(0);
+  const [uploadTargetDirectory, setUploadTargetDirectory] = useState("");
+  const [isAddingFiles, setIsAddingFiles] = useState(false);
+  const [addFilesError, setAddFilesError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [openDirectories, setOpenDirectories] = useState<ReadonlySet<string>>(
     () => new Set(["src", "apps", "packages", ".docs", "docs"]),
   );
@@ -615,6 +646,61 @@ export function AtelierWorkspaceDrawer(props: {
       return next;
     });
   }, []);
+  const refreshWorkspaceEntries = useCallback(() => {
+    setWorkspaceRefreshToken((token) => token + 1);
+  }, []);
+  const openAddFilesPicker = useCallback((directory: string) => {
+    setUploadTargetDirectory(directory);
+    setAddFilesError(null);
+    fileInputRef.current?.click();
+  }, []);
+  const addFilesToWorkspace = useCallback(
+    async (directory: string, files: FileList | readonly File[]) => {
+      if (!activeCwd || !thread?.environmentId || files.length === 0) {
+        return;
+      }
+      const api = readEnvironmentApi(thread.environmentId);
+      if (!api) {
+        setAddFilesError("Workspace API is unavailable.");
+        return;
+      }
+
+      setIsAddingFiles(true);
+      setAddFilesError(null);
+      try {
+        for (const file of Array.from(files)) {
+          await api.projects.writeFile({
+            cwd: activeCwd,
+            relativePath: joinRelativePath(directory, file.name),
+            contents: await readFileAsBase64(file),
+            encoding: "base64",
+          });
+        }
+        refreshWorkspaceEntries();
+        setOpenDirectories((previous) => {
+          if (!directory) return previous;
+          const next = new Set(previous);
+          next.add(directory);
+          return next;
+        });
+      } catch (error) {
+        setAddFilesError(error instanceof Error ? error.message : "Failed to add file.");
+      } finally {
+        setIsAddingFiles(false);
+      }
+    },
+    [activeCwd, refreshWorkspaceEntries, thread?.environmentId],
+  );
+  const onFilesSelected = useCallback(
+    (event: ReactChangeEvent<HTMLInputElement>) => {
+      const files = event.currentTarget.files;
+      if (files) {
+        void addFilesToWorkspace(uploadTargetDirectory, files);
+      }
+      event.currentTarget.value = "";
+    },
+    [addFilesToWorkspace, uploadTargetDirectory],
+  );
 
   if (!props.open) {
     return null;
@@ -627,7 +713,11 @@ export function AtelierWorkspaceDrawer(props: {
         activeCwd={activeCwd}
         query={workspaceQuery}
         onQueryChange={setWorkspaceQuery}
-        onRefresh={() => setWorkspaceRefreshToken((token) => token + 1)}
+        onRefresh={refreshWorkspaceEntries}
+        onAddFiles={openAddFilesPicker}
+        onDropFiles={(directory, files) => void addFilesToWorkspace(directory, files)}
+        isAddingFiles={isAddingFiles}
+        addFilesError={addFilesError}
         isLoading={workspaceEntriesQuery.isFetching && workspaceEntries.length === 0}
         isRefreshing={workspaceEntriesQuery.isFetching && workspaceEntries.length > 0}
         isError={workspaceEntriesQuery.isError}
@@ -637,6 +727,13 @@ export function AtelierWorkspaceDrawer(props: {
         onToggleDirectory={toggleDirectory}
         onOpenFile={props.onOpenFile}
         onClose={props.onClose}
+      />
+      <input
+        ref={fileInputRef}
+        className="hidden"
+        type="file"
+        multiple
+        onChange={onFilesSelected}
       />
     </aside>
   );
@@ -688,6 +785,7 @@ export function AtelierWorkbench({
   ]);
   const [splitOpen, setSplitOpen] = useState(false);
   const [splitOrientation, setSplitOrientation] = useState<WorkbenchSplitOrientation>("vertical");
+  const threadKey = `${threadRef.environmentId}:${threadRef.threadId}`;
 
   const gitFiles = gitStatus.data?.workingTree.files ?? [];
   const changedFiles = summarizeChangedFiles(thread, gitFiles);
@@ -703,6 +801,23 @@ export function AtelierWorkbench({
   useEffect(() => {
     window.localStorage.setItem(WORKBENCH_EXPANDED_STORAGE_KEY, String(expanded));
   }, [expanded]);
+
+  useEffect(() => {
+    setTabById(new Map(DEFAULT_WORKBENCH_TAB_MAP));
+    setPanes([
+      {
+        id: "primary",
+        tabIds: [...DEFAULT_WORKBENCH_PANES[0]!.tabIds],
+        activeTabId: DEFAULT_WORKBENCH_PANES[0]!.activeTabId,
+      },
+      {
+        id: "secondary",
+        tabIds: [...DEFAULT_WORKBENCH_PANES[1]!.tabIds],
+        activeTabId: DEFAULT_WORKBENCH_PANES[1]!.activeTabId,
+      },
+    ]);
+    setSplitOpen(false);
+  }, [threadKey]);
 
   const activePaneId = panes.find((pane) => pane.activeTabId !== null)?.id ?? "primary";
 
@@ -761,12 +876,13 @@ export function AtelierWorkbench({
 
   useEffect(() => {
     if (!fileOpenRequest) return;
+    if (fileOpenRequest.threadKey !== threadKey) return;
     const tab =
       fileOpenRequest.source === "output"
         ? makeOutputTab(fileOpenRequest.relativePath)
         : makeFileTab(fileOpenRequest.relativePath);
     ensureTab(tab, activePaneId);
-  }, [activePaneId, ensureTab, fileOpenRequest]);
+  }, [activePaneId, ensureTab, fileOpenRequest, threadKey]);
 
   const closeTab = useCallback(
     (tabId: WorkbenchTabId, paneId: WorkbenchPaneId) => {
@@ -1561,8 +1677,24 @@ function WorkspacePanel(props: {
   openDirectories: ReadonlySet<string>;
   onToggleDirectory: (path: string) => void;
   onOpenFile: (path: string) => void;
+  onAddFiles: (directory: string) => void;
+  onDropFiles: (directory: string, files: FileList) => void;
+  isAddingFiles: boolean;
+  addFilesError: string | null;
   onClose?: () => void;
 }) {
+  const handleDrop = (directory: string, event: ReactDragEvent<HTMLElement>) => {
+    if (event.dataTransfer.files.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    props.onDropFiles(directory, event.dataTransfer.files);
+  };
+  const allowFileDrop = (event: ReactDragEvent<HTMLElement>) => {
+    if (event.dataTransfer.types.includes("Files")) {
+      event.preventDefault();
+    }
+  };
+
   return (
     <WorkbenchPanelShell
       title="Workspace"
@@ -1570,6 +1702,23 @@ function WorkspacePanel(props: {
       icon={FolderOpenIcon}
       actions={
         <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => props.onAddFiles("")}
+                  aria-label="Add files to workspace root"
+                  disabled={!props.activeCwd || props.isAddingFiles}
+                >
+                  <PlusIcon />
+                </Button>
+              }
+            />
+            <TooltipPopup side="bottom">Add files</TooltipPopup>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger
               render={
@@ -1616,8 +1765,15 @@ function WorkspacePanel(props: {
             Showing the highest ranked entries from a large workspace.
           </p>
         ) : null}
+        {props.addFilesError ? (
+          <p className="mt-2 text-[11px] text-destructive">{props.addFilesError}</p>
+        ) : null}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto p-2"
+        onDragOver={allowFileDrop}
+        onDrop={(event) => handleDrop("", event)}
+      >
         {props.isLoading ? (
           <div className="space-y-2 p-2">
             {Array.from({ length: 10 }, (_, index) => (
@@ -1646,38 +1802,57 @@ function WorkspacePanel(props: {
               const isDirectory = node.kind === "directory";
               const isOpen = props.openDirectories.has(node.path);
               return (
-                <button
+                <div
                   key={node.path}
-                  type="button"
-                  className="group flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md pr-2 text-left text-xs text-muted-foreground hover:bg-background hover:text-foreground"
-                  style={{ paddingLeft: 6 + depth * 14 }}
-                  onClick={() => {
-                    if (isDirectory) props.onToggleDirectory(node.path);
-                    else props.onOpenFile(node.path);
-                  }}
+                  className="group flex h-7 w-full min-w-0 items-center rounded-md text-xs text-muted-foreground hover:bg-background hover:text-foreground"
+                  onDragOver={isDirectory ? allowFileDrop : undefined}
+                  onDrop={isDirectory ? (event) => handleDrop(node.path, event) : undefined}
                   title={node.path}
                 >
-                  <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground/70">
-                    {isDirectory ? (
-                      isOpen ? (
-                        <ChevronDownIcon className="size-3" />
-                      ) : (
-                        <ChevronRightIcon className="size-3" />
-                      )
-                    ) : null}
-                  </span>
-                  {isDirectory ? (
-                    <FolderIcon className="size-3.5 shrink-0" />
-                  ) : (
-                    <FileTypeBadge name={node.name} />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">{node.name}</span>
-                  {!isDirectory ? (
-                    <span className="hidden shrink-0 text-[10px] text-muted-foreground/45 group-hover:block">
-                      {compactPath(dirname(node.path), 2)}
+                  <button
+                    type="button"
+                    className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-md pr-2 text-left"
+                    style={{ paddingLeft: 6 + depth * 14 }}
+                    onClick={() => {
+                      if (isDirectory) props.onToggleDirectory(node.path);
+                      else props.onOpenFile(node.path);
+                    }}
+                  >
+                    <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground/70">
+                      {isDirectory ? (
+                        isOpen ? (
+                          <ChevronDownIcon className="size-3" />
+                        ) : (
+                          <ChevronRightIcon className="size-3" />
+                        )
+                      ) : null}
                     </span>
+                    {isDirectory ? (
+                      <FolderIcon className="size-3.5 shrink-0" />
+                    ) : (
+                      <FileTypeBadge name={node.name} />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">{node.name}</span>
+                    {!isDirectory ? (
+                      <span className="hidden shrink-0 text-[10px] text-muted-foreground/45 group-hover:block">
+                        {compactPath(dirname(node.path), 2)}
+                      </span>
+                    ) : null}
+                  </button>
+                  {isDirectory ? (
+                    <button
+                      type="button"
+                      className="mr-1 hidden size-5 shrink-0 items-center justify-center rounded text-muted-foreground/60 hover:bg-muted hover:text-foreground group-hover:flex"
+                      aria-label={`Add files to ${node.path}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onAddFiles(node.path);
+                      }}
+                    >
+                      <PlusIcon className="size-3" />
+                    </button>
                   ) : null}
-                </button>
+                </div>
               );
             })}
           </div>

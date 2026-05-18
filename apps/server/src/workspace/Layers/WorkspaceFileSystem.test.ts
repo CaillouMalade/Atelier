@@ -151,6 +151,29 @@ it.layer(TestLayer)("WorkspaceFileSystemLive", (it) => {
       }),
     );
 
+    it.effect("writes base64 encoded binary files relative to the workspace root", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const bytes = Uint8Array.from([0, 1, 2, 253, 254, 255]);
+
+        const result = yield* workspaceFileSystem.writeFile({
+          cwd,
+          relativePath: "docs/upload.pdf",
+          contents: Buffer.from(bytes).toString("base64"),
+          encoding: "base64",
+        });
+        const saved = yield* fileSystem
+          .readFile(path.join(cwd, "docs/upload.pdf"))
+          .pipe(Effect.orDie);
+
+        expect(result).toEqual({ relativePath: "docs/upload.pdf" });
+        expect([...saved]).toEqual([...bytes]);
+      }),
+    );
+
     it.effect("rejects writes outside the workspace root", () =>
       Effect.gen(function* () {
         const workspaceFileSystem = yield* WorkspaceFileSystem;

@@ -42,7 +42,7 @@ up the codebase can see them.
 
 ### Bugs
 
-- [ ] **PDF artifacts leak across chats.** When alternating between chats, a
+- [x] **PDF artifacts leak across chats.** When alternating between chats, a
   PDF opened in one chat (an artifact) tries to open in the other chat where
   it doesn't exist. The PDF viewer / artifact state seems to be shared or
   not scoped per-thread. Repro: open a PDF artifact in chat A, switch to
@@ -55,7 +55,7 @@ up the codebase can see them.
   a message forces the sidebar / artifacts panel open even if the user had
   deliberately closed it. The send action should not change panel
   visibility — respect the user's current layout.
-- [ ] **Cannot `git pull` from the source control UI — only push and commit
+- [x] **Cannot `git pull` from the source control UI — only push and commit
   work.** Pull is either missing or broken in the source control surface.
   Check the VCS driver / source-control provider wiring (see
   `.plans/19-version-control-phase-1-vcs-driver-foundation.md` and
@@ -68,7 +68,7 @@ up the codebase can see them.
   other windows. It does not need to work perfectly at extreme sizes; just
   let it compress substantially more, roughly toward a slim tenth-of-screen
   chat-window use case.
-- [ ] **Add files into the folder tree from the UI.** In the folder-tree
+- [x] **Add files into the folder tree from the UI.** In the folder-tree
   exploration view, there is no way to add a PDF / file. Add either
   drag-and-drop onto a folder node, or a `+` button on hover, or both. Nice
   to have; not critical if it turns messy.
@@ -76,7 +76,7 @@ up the codebase can see them.
   be indexed once when the app or chat loads. If a chat creates a new
   subdirectory or note, the folder tree does not update. Add a manual refresh
   action in the folder-tree view so the user can rescan when needed.
-- [ ] **Keyboard shortcut to collapse the right sidebar.** There is currently
+- [x] **Keyboard shortcut to collapse the right sidebar.** There is currently
   no shortcut for this. Pick a binding consistent with the existing
   sidebar/keybindings convention (see `KEYBINDINGS.md`).
 - [ ] **Allow project icon and color customization.** Bare minimum for
@@ -95,9 +95,20 @@ up the codebase can see them.
 - Workspace drawer has a refresh button. The web query sends a `refresh` flag
   and the server invalidates the workspace-entry cache before rebuilding the
   index.
+- Workspace drawer can add files into the workspace root or a hovered folder
+  with a `+` button, and supports drag-and-drop onto the drawer or folder rows.
+  Project file writes now accept base64 payloads so PDFs and other binary files
+  survive upload intact.
+- Source control actions include an explicit Pull menu item when the branch has
+  an upstream. Pull uses the existing VCS pull RPC and success/error toasts.
+- Workbench file/artifact open requests are scoped to the originating thread so
+  an artifact opened in one chat cannot replay into another chat after route
+  changes.
 - Workbench collapsed/expanded state is persisted in local storage so sending
   a chat or remounting the route does not reopen the right workbench after the
   user has closed it.
+- `workbench.toggle` is part of the default configurable keybindings as
+  `mod+shift+b`, and is documented in `KEYBINDINGS.md`.
 - Desktop window, left sidebar, main content, and workbench minimum widths were
   lowered so the app can compress much more than before.
 
@@ -105,5 +116,11 @@ Verification:
 
 - Arthur manually checked the dev app and confirmed the implemented items work
   as expected.
+- Arthur manually checked PDF/artifact switching across chats, source-control
+  pull visibility, workspace file add via buttons/drag-and-drop, and the
+  configurable right-workbench shortcut.
+- `bun --cwd apps/web test src/components/GitActionsControl.logic.test.ts`
+- `bunx vitest run apps/server/src/workspace/Layers/WorkspaceFileSystem.test.ts apps/server/src/keybindings.test.ts`
+- `bunx vitest run apps/server/src/server.test.ts`
 - `bun --cwd apps/server test src/workspace/Layers/WorkspaceEntries.test.ts`
 - `bun run typecheck`

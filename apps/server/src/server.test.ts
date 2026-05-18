@@ -2469,6 +2469,33 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("routes websocket rpc projects.writeFile with base64 contents", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const workspaceDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-ws-project-write-" });
+      const bytes = Uint8Array.from([0, 1, 2, 253, 254, 255]);
+
+      yield* buildAppUnderTest();
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const response = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.projectsWriteFile]({
+            cwd: workspaceDir,
+            relativePath: "nested/upload.pdf",
+            contents: Buffer.from(bytes).toString("base64"),
+            encoding: "base64",
+          }),
+        ),
+      );
+
+      assert.equal(response.relativePath, "nested/upload.pdf");
+      const persisted = yield* fs.readFile(path.join(workspaceDir, "nested", "upload.pdf"));
+      assert.deepEqual([...persisted], [...bytes]);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("creates a missing workspace root during websocket project.create dispatch", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

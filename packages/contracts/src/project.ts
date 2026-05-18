@@ -63,6 +63,7 @@ export const ProjectWriteFileInput = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(PROJECT_WRITE_FILE_PATH_MAX_LENGTH)),
   contents: Schema.String,
+  encoding: Schema.optionalKey(Schema.Literals(["utf8", "base64"])),
 });
 export type ProjectWriteFileInput = typeof ProjectWriteFileInput.Type;
 
