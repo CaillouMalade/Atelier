@@ -2987,12 +2987,13 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     }
 
     return [
-      ...validGroups.flatMap((group) => {
-        const projects = buckets.get(group.id) ?? [];
-        return projects.length > 0 ? [{ id: group.id, name: group.name, projects }] : [];
-      }),
+      ...validGroups.map((group) => ({
+        id: group.id,
+        name: group.name,
+        projects: buckets.get(group.id) ?? [],
+      })),
       { id: UNGROUPED_PROJECT_GROUP_ID, name: "Projects", projects: ungrouped },
-    ].filter((group) => group.projects.length > 0);
+    ].filter((group) => group.id !== UNGROUPED_PROJECT_GROUP_ID || group.projects.length > 0);
   }, [projectUiGroupAssignments, projectUiGroups, sortedProjects]);
   const closeProjectGroupDialog = useCallback(() => {
     setProjectGroupDialogOpen(false);
@@ -3253,38 +3254,126 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 items={sortedProjects.map((project) => project.projectKey)}
                 strategy={verticalListSortingStrategy}
               >
-                {groupedProjects.flatMap((group) =>
-                  group.projects.map((project) => (
-                    <SortableProjectItem key={project.projectKey} projectId={project.projectKey}>
-                      {(dragHandleProps) => (
-                        <SidebarProjectItem
-                          project={project}
-                          isThreadListExpanded={expandedThreadListsByProject.has(
-                            project.projectKey,
+                {groupedProjects.map((group) => (
+                  <React.Fragment key={group.id}>
+                    {group.id === UNGROUPED_PROJECT_GROUP_ID ? (
+                      group.projects.map((project) => (
+                        <SortableProjectItem
+                          key={project.projectKey}
+                          projectId={project.projectKey}
+                        >
+                          {(dragHandleProps) => (
+                            <SidebarProjectItem
+                              project={project}
+                              isThreadListExpanded={expandedThreadListsByProject.has(
+                                project.projectKey,
+                              )}
+                              activeRouteThreadKey={
+                                activeRouteProjectKey === project.projectKey ? routeThreadKey : null
+                              }
+                              newThreadShortcutLabel={newThreadShortcutLabel}
+                              handleNewThread={handleNewThread}
+                              archiveThread={archiveThread}
+                              deleteThread={deleteThread}
+                              threadJumpLabelByKey={threadJumpLabelByKey}
+                              attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                              expandThreadListForProject={expandThreadListForProject}
+                              collapseThreadListForProject={collapseThreadListForProject}
+                              dragInProgressRef={dragInProgressRef}
+                              suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                              suppressProjectClickForContextMenuRef={
+                                suppressProjectClickForContextMenuRef
+                              }
+                              isManualProjectSorting={isManualProjectSorting}
+                              dragHandleProps={dragHandleProps}
+                            />
                           )}
-                          activeRouteThreadKey={
-                            activeRouteProjectKey === project.projectKey ? routeThreadKey : null
-                          }
-                          newThreadShortcutLabel={newThreadShortcutLabel}
-                          handleNewThread={handleNewThread}
-                          archiveThread={archiveThread}
-                          deleteThread={deleteThread}
-                          threadJumpLabelByKey={threadJumpLabelByKey}
-                          attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                          expandThreadListForProject={expandThreadListForProject}
-                          collapseThreadListForProject={collapseThreadListForProject}
-                          dragInProgressRef={dragInProgressRef}
-                          suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
-                          suppressProjectClickForContextMenuRef={
-                            suppressProjectClickForContextMenuRef
-                          }
-                          isManualProjectSorting={isManualProjectSorting}
-                          dragHandleProps={dragHandleProps}
-                        />
-                      )}
-                    </SortableProjectItem>
-                  )),
-                )}
+                        </SortableProjectItem>
+                      ))
+                    ) : (
+                      <div
+                        ref={attachProjectGroupAutoAnimateRef}
+                        className="mb-1.5 rounded-lg border border-border/55 bg-muted/30 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)]"
+                      >
+                        <button
+                          type="button"
+                          className={cn(
+                            "flex h-7 w-full items-center gap-1.5 rounded-md px-1.5 text-left text-xs font-semibold text-foreground/85 transition-colors hover:bg-accent/70 hover:text-foreground",
+                            (projectGroupExpandedById[group.id] ?? true) && "mb-1",
+                          )}
+                          aria-expanded={projectGroupExpandedById[group.id] ?? true}
+                          onClick={() => toggleProjectGroup(group.id)}
+                          onContextMenu={(event) => handleProjectGroupContextMenu(event, group)}
+                        >
+                          <ChevronRightIcon
+                            className={cn(
+                              "-ml-0.5 size-3 shrink-0 transition-transform duration-150",
+                              (projectGroupExpandedById[group.id] ?? true) && "rotate-90",
+                            )}
+                          />
+                          <ProjectAppearanceIconMark
+                            appearance={
+                              projectGroupAppearanceById[group.id] ?? DEFAULT_PROJECT_APPEARANCE
+                            }
+                          />
+                          <span className="min-w-0 flex-1 truncate">{group.name}</span>
+                          <span className="rounded-full bg-background/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/70">
+                            {group.projects.length}
+                          </span>
+                        </button>
+                        {(projectGroupExpandedById[group.id] ?? true) ? (
+                          <div className="ml-2 space-y-1 border-l border-border/55 pl-1.5">
+                            {group.projects.length > 0 ? (
+                              group.projects.map((project) => (
+                                <SortableProjectItem
+                                  key={project.projectKey}
+                                  projectId={project.projectKey}
+                                >
+                                  {(dragHandleProps) => (
+                                    <SidebarProjectItem
+                                      project={project}
+                                      isThreadListExpanded={expandedThreadListsByProject.has(
+                                        project.projectKey,
+                                      )}
+                                      activeRouteThreadKey={
+                                        activeRouteProjectKey === project.projectKey
+                                          ? routeThreadKey
+                                          : null
+                                      }
+                                      newThreadShortcutLabel={newThreadShortcutLabel}
+                                      handleNewThread={handleNewThread}
+                                      archiveThread={archiveThread}
+                                      deleteThread={deleteThread}
+                                      threadJumpLabelByKey={threadJumpLabelByKey}
+                                      attachThreadListAutoAnimateRef={
+                                        attachThreadListAutoAnimateRef
+                                      }
+                                      expandThreadListForProject={expandThreadListForProject}
+                                      collapseThreadListForProject={collapseThreadListForProject}
+                                      dragInProgressRef={dragInProgressRef}
+                                      suppressProjectClickAfterDragRef={
+                                        suppressProjectClickAfterDragRef
+                                      }
+                                      suppressProjectClickForContextMenuRef={
+                                        suppressProjectClickForContextMenuRef
+                                      }
+                                      isManualProjectSorting={isManualProjectSorting}
+                                      dragHandleProps={dragHandleProps}
+                                    />
+                                  )}
+                                </SortableProjectItem>
+                              ))
+                            ) : (
+                              <div className="px-2 py-1.5 text-[11px] text-muted-foreground/55">
+                                No projects in this group
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+                  </React.Fragment>
+                ))}
               </SortableContext>
             </SidebarMenu>
           </DndContext>
@@ -3349,33 +3438,39 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                     </button>
                     {(projectGroupExpandedById[group.id] ?? true) ? (
                       <div className="ml-2 space-y-1 border-l border-border/55 pl-1.5">
-                        {group.projects.map((project) => (
-                          <SidebarProjectListRow
-                            key={project.projectKey}
-                            project={project}
-                            isThreadListExpanded={expandedThreadListsByProject.has(
-                              project.projectKey,
-                            )}
-                            activeRouteThreadKey={
-                              activeRouteProjectKey === project.projectKey ? routeThreadKey : null
-                            }
-                            newThreadShortcutLabel={newThreadShortcutLabel}
-                            handleNewThread={handleNewThread}
-                            archiveThread={archiveThread}
-                            deleteThread={deleteThread}
-                            threadJumpLabelByKey={threadJumpLabelByKey}
-                            attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                            expandThreadListForProject={expandThreadListForProject}
-                            collapseThreadListForProject={collapseThreadListForProject}
-                            dragInProgressRef={dragInProgressRef}
-                            suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
-                            suppressProjectClickForContextMenuRef={
-                              suppressProjectClickForContextMenuRef
-                            }
-                            isManualProjectSorting={isManualProjectSorting}
-                            dragHandleProps={null}
-                          />
-                        ))}
+                        {group.projects.length > 0 ? (
+                          group.projects.map((project) => (
+                            <SidebarProjectListRow
+                              key={project.projectKey}
+                              project={project}
+                              isThreadListExpanded={expandedThreadListsByProject.has(
+                                project.projectKey,
+                              )}
+                              activeRouteThreadKey={
+                                activeRouteProjectKey === project.projectKey ? routeThreadKey : null
+                              }
+                              newThreadShortcutLabel={newThreadShortcutLabel}
+                              handleNewThread={handleNewThread}
+                              archiveThread={archiveThread}
+                              deleteThread={deleteThread}
+                              threadJumpLabelByKey={threadJumpLabelByKey}
+                              attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                              expandThreadListForProject={expandThreadListForProject}
+                              collapseThreadListForProject={collapseThreadListForProject}
+                              dragInProgressRef={dragInProgressRef}
+                              suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                              suppressProjectClickForContextMenuRef={
+                                suppressProjectClickForContextMenuRef
+                              }
+                              isManualProjectSorting={isManualProjectSorting}
+                              dragHandleProps={null}
+                            />
+                          ))
+                        ) : (
+                          <div className="px-2 py-1.5 text-[11px] text-muted-foreground/55">
+                            No projects in this group
+                          </div>
+                        )}
                       </div>
                     ) : null}
                   </div>
