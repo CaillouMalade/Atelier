@@ -7,6 +7,8 @@ import {
   $convertFromMarkdownString,
   $convertToMarkdownString,
   TRANSFORMERS,
+  type ElementTransformer,
+  type Transformer,
 } from "@lexical/markdown";
 import { LexicalComposer, type InitialConfigType } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
@@ -61,7 +63,19 @@ import {
   useRef,
   useState,
 } from "react";
-import { $getRoot, type EditorState, type EditorThemeClasses, type LexicalEditor } from "lexical";
+import {
+  $applyNodeReplacement,
+  $createParagraphNode,
+  $getRoot,
+  DecoratorNode,
+  type DOMConversionMap,
+  type DOMExportOutput,
+  type EditorState,
+  type EditorThemeClasses,
+  type LexicalEditor,
+  type LexicalNode,
+  type SerializedLexicalNode,
+} from "lexical";
 
 import {
   projectQueryKeys,
@@ -69,11 +83,13 @@ import {
   projectSearchEntriesQueryOptions,
 } from "../lib/projectReactQuery";
 import { readEnvironmentApi } from "../environmentApi";
+import { isElectron } from "../env";
 import { resolveShortcutCommand } from "../keybindings";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { useGitStatus } from "../lib/gitStatusState";
 import { cn } from "../lib/utils";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
+import { useComposerDraftStore } from "../composerDraftStore";
 import { deriveWorkLogEntries } from "../session-logic";
 import { selectProjectByRef, useStore } from "../store";
 import { createThreadSelectorByRef } from "../storeSelectors";
@@ -88,7 +104,8 @@ import { Skeleton } from "./ui/skeleton";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 type WorkbenchSingletonTabId = "changes" | "outputs" | "browser" | "scratch";
-type WorkbenchTabId = WorkbenchSingletonTabId | `file:${string}` | `output:${string}`;
+type WorkbenchFileTabId = `file:${string}`;
+type WorkbenchTabId = WorkbenchSingletonTabId | WorkbenchFileTabId;
 type WorkbenchPaneId = "primary" | "secondary";
 type WorkbenchSplitOrientation = "vertical" | "horizontal";
 
@@ -109,20 +126,11 @@ type WorkbenchTab =
       readonly shortTitle: string;
       readonly icon: typeof FileIcon;
       readonly path: string;
-    }
-  | {
-      readonly id: `output:${string}`;
-      readonly kind: "output";
-      readonly title: string;
-      readonly shortTitle: string;
-      readonly icon: typeof SparklesIcon;
-      readonly path: string;
-      readonly contents?: string;
     };
 
 interface WorkbenchPaneState {
   readonly id: WorkbenchPaneId;
-  readonly tabIds: WorkbenchTabId[];
+  readonly tabIds: WorkbenchFileTabId[];
   readonly activeTabId: WorkbenchTabId | null;
 }
 
@@ -198,7 +206,7 @@ const DEFAULT_WORKBENCH_TAB_MAP = new Map<WorkbenchTabId, WorkbenchTab>(
 const DEFAULT_WORKBENCH_PANES: WorkbenchPaneState[] = [
   {
     id: "primary",
-    tabIds: ["outputs"],
+    tabIds: [],
     activeTabId: "outputs",
   },
   {
@@ -305,8 +313,8 @@ function fileTabId(path: string): `file:${string}` {
   return `file:${path}`;
 }
 
-function outputTabId(path: string): `output:${string}` {
-  return `output:${path}`;
+function isFileTabId(tabId: WorkbenchTabId): tabId is WorkbenchFileTabId {
+  return tabId.startsWith("file:");
 }
 
 function makeFileTab(path: string): WorkbenchTab {
@@ -317,18 +325,6 @@ function makeFileTab(path: string): WorkbenchTab {
     shortTitle: basename(path),
     icon: FileIcon,
     path,
-  };
-}
-
-function makeOutputTab(path: string, contents?: string): WorkbenchTab {
-  return {
-    id: outputTabId(path),
-    kind: "output",
-    title: basename(path),
-    shortTitle: basename(path),
-    icon: SparklesIcon,
-    path,
-    ...(contents !== undefined ? { contents } : {}),
   };
 }
 
@@ -600,15 +596,16 @@ export function AtelierWorkspaceDrawer(props: {
   const thread = useStore(
     useMemo(() => createThreadSelectorByRef(props.threadRef), [props.threadRef]),
   );
+  const draftThread = useComposerDraftStore((store) => store.getDraftThreadByRef(props.threadRef));
   const activeProject = useStore((state) =>
-    thread
+    thread || draftThread
       ? selectProjectByRef(state, {
-          environmentId: thread.environmentId,
-          projectId: thread.projectId,
+          environmentId: thread?.environmentId ?? draftThread!.environmentId,
+          projectId: thread?.projectId ?? draftThread!.projectId,
         })
       : undefined,
   );
-  const activeCwd = thread?.worktreePath ?? activeProject?.cwd ?? null;
+  const activeCwd = thread?.worktreePath ?? draftThread?.worktreePath ?? activeProject?.cwd ?? null;
   const [workspaceQuery, setWorkspaceQuery] = useState("");
   const [workspaceRefreshToken, setWorkspaceRefreshToken] = useState(0);
   const [uploadTargetDirectory, setUploadTargetDirectory] = useState("");
@@ -622,13 +619,14 @@ export function AtelierWorkspaceDrawer(props: {
   const trimmedWorkspaceQuery = workspaceQuery.trim();
   const workspaceEntriesQuery = useQuery(
     projectSearchEntriesQueryOptions({
-      environmentId: thread?.environmentId ?? null,
+      environmentId: thread?.environmentId ?? draftThread?.environmentId ?? null,
       cwd: activeCwd,
       query: trimmedWorkspaceQuery.length > 0 ? trimmedWorkspaceQuery : ".",
       limit: trimmedWorkspaceQuery.length > 0 ? 180 : 5000,
       refresh: workspaceRefreshToken > 0,
       refreshToken: workspaceRefreshToken,
-      enabled: props.open && Boolean(thread?.environmentId && activeCwd),
+      enabled:
+        props.open && Boolean((thread?.environmentId ?? draftThread?.environmentId) && activeCwd),
     }),
   );
 
@@ -656,10 +654,11 @@ export function AtelierWorkspaceDrawer(props: {
   }, []);
   const addFilesToWorkspace = useCallback(
     async (directory: string, files: FileList | readonly File[]) => {
-      if (!activeCwd || !thread?.environmentId || files.length === 0) {
+      const environmentId = thread?.environmentId ?? draftThread?.environmentId;
+      if (!activeCwd || !environmentId || files.length === 0) {
         return;
       }
-      const api = readEnvironmentApi(thread.environmentId);
+      const api = readEnvironmentApi(environmentId);
       if (!api) {
         setAddFilesError("Workspace API is unavailable.");
         return;
@@ -689,7 +688,7 @@ export function AtelierWorkspaceDrawer(props: {
         setIsAddingFiles(false);
       }
     },
-    [activeCwd, refreshWorkspaceEntries, thread?.environmentId],
+    [activeCwd, draftThread?.environmentId, refreshWorkspaceEntries, thread?.environmentId],
   );
   const onFilesSelected = useCallback(
     (event: ReactChangeEvent<HTMLInputElement>) => {
@@ -707,27 +706,29 @@ export function AtelierWorkspaceDrawer(props: {
   }
 
   return (
-    <aside className="hidden h-full min-h-0 w-80 shrink-0 border-r border-border bg-card text-foreground shadow-sm lg:flex lg:flex-col">
-      <WorkspacePanel
-        project={activeProject}
-        activeCwd={activeCwd}
-        query={workspaceQuery}
-        onQueryChange={setWorkspaceQuery}
-        onRefresh={refreshWorkspaceEntries}
-        onAddFiles={openAddFilesPicker}
-        onDropFiles={(directory, files) => void addFilesToWorkspace(directory, files)}
-        isAddingFiles={isAddingFiles}
-        addFilesError={addFilesError}
-        isLoading={workspaceEntriesQuery.isFetching && workspaceEntries.length === 0}
-        isRefreshing={workspaceEntriesQuery.isFetching && workspaceEntries.length > 0}
-        isError={workspaceEntriesQuery.isError}
-        truncated={workspaceEntriesQuery.data?.truncated ?? false}
-        rows={visibleTreeRows}
-        openDirectories={openDirectories}
-        onToggleDirectory={toggleDirectory}
-        onOpenFile={props.onOpenFile}
-        onClose={props.onClose}
-      />
+    <aside className="hidden h-full min-h-0 w-80 shrink-0 bg-transparent p-2 text-foreground lg:flex lg:flex-col">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border/65 bg-card/85 shadow-sm backdrop-blur">
+        <WorkspacePanel
+          project={activeProject}
+          activeCwd={activeCwd}
+          query={workspaceQuery}
+          onQueryChange={setWorkspaceQuery}
+          onRefresh={refreshWorkspaceEntries}
+          onAddFiles={openAddFilesPicker}
+          onDropFiles={(directory, files) => void addFilesToWorkspace(directory, files)}
+          isAddingFiles={isAddingFiles}
+          addFilesError={addFilesError}
+          isLoading={workspaceEntriesQuery.isFetching && workspaceEntries.length === 0}
+          isRefreshing={workspaceEntriesQuery.isFetching && workspaceEntries.length > 0}
+          isError={workspaceEntriesQuery.isError}
+          truncated={workspaceEntriesQuery.data?.truncated ?? false}
+          rows={visibleTreeRows}
+          openDirectories={openDirectories}
+          onToggleDirectory={toggleDirectory}
+          onOpenFile={props.onOpenFile}
+          onClose={props.onClose}
+        />
+      </div>
       <input
         ref={fileInputRef}
         className="hidden"
@@ -749,16 +750,17 @@ export function AtelierWorkbench({
   onCloseDiff,
 }: AtelierWorkbenchProps) {
   const thread = useStore(useMemo(() => createThreadSelectorByRef(threadRef), [threadRef]));
+  const draftThread = useComposerDraftStore((store) => store.getDraftThreadByRef(threadRef));
   const keybindings = useServerKeybindings();
   const activeProject = useStore((state) =>
-    thread
+    thread || draftThread
       ? selectProjectByRef(state, {
-          environmentId: thread.environmentId,
-          projectId: thread.projectId,
+          environmentId: thread?.environmentId ?? draftThread!.environmentId,
+          projectId: thread?.projectId ?? draftThread!.projectId,
         })
       : undefined,
   );
-  const activeCwd = thread?.worktreePath ?? activeProject?.cwd ?? null;
+  const activeCwd = thread?.worktreePath ?? draftThread?.worktreePath ?? activeProject?.cwd ?? null;
   const gitStatus = useGitStatus({
     environmentId: thread?.environmentId ?? null,
     cwd: activeCwd,
@@ -785,6 +787,7 @@ export function AtelierWorkbench({
   ]);
   const [splitOpen, setSplitOpen] = useState(false);
   const [splitOrientation, setSplitOrientation] = useState<WorkbenchSplitOrientation>("vertical");
+  const [selectedOutputPath, setSelectedOutputPath] = useState<string | null>(null);
   const threadKey = `${threadRef.environmentId}:${threadRef.threadId}`;
 
   const gitFiles = gitStatus.data?.workingTree.files ?? [];
@@ -817,6 +820,7 @@ export function AtelierWorkbench({
       },
     ]);
     setSplitOpen(false);
+    setSelectedOutputPath(null);
   }, [threadKey]);
 
   const activePaneId = panes.find((pane) => pane.activeTabId !== null)?.id ?? "primary";
@@ -827,9 +831,13 @@ export function AtelierWorkbench({
       setPanes((previous) =>
         previous.map((pane) => {
           if (pane.id !== paneId) return pane;
+          const tabIds =
+            isFileTabId(tabId) && !pane.tabIds.includes(tabId)
+              ? [...pane.tabIds, tabId]
+              : pane.tabIds;
           return {
             ...pane,
-            tabIds: pane.tabIds.includes(tabId) ? pane.tabIds : [...pane.tabIds, tabId],
+            tabIds,
             activeTabId: tabId,
           };
         }),
@@ -866,7 +874,6 @@ export function AtelierWorkbench({
         index === 0
           ? {
               ...pane,
-              tabIds: pane.tabIds.includes("changes") ? pane.tabIds : ["changes", ...pane.tabIds],
               activeTabId: "changes",
             }
           : pane,
@@ -877,12 +884,13 @@ export function AtelierWorkbench({
   useEffect(() => {
     if (!fileOpenRequest) return;
     if (fileOpenRequest.threadKey !== threadKey) return;
-    const tab =
-      fileOpenRequest.source === "output"
-        ? makeOutputTab(fileOpenRequest.relativePath)
-        : makeFileTab(fileOpenRequest.relativePath);
-    ensureTab(tab, activePaneId);
-  }, [activePaneId, ensureTab, fileOpenRequest, threadKey]);
+    if (fileOpenRequest.source === "output") {
+      setSelectedOutputPath(fileOpenRequest.relativePath);
+      activateTab("outputs", activePaneId);
+      return;
+    }
+    ensureTab(makeFileTab(fileOpenRequest.relativePath), activePaneId);
+  }, [activateTab, activePaneId, ensureTab, fileOpenRequest, threadKey]);
 
   const closeTab = useCallback(
     (tabId: WorkbenchTabId, paneId: WorkbenchPaneId) => {
@@ -891,7 +899,7 @@ export function AtelierWorkbench({
           if (pane.id !== paneId) return pane;
           const nextTabIds = pane.tabIds.filter((id) => id !== tabId);
           const nextActiveTabId =
-            pane.activeTabId === tabId ? (nextTabIds.at(-1) ?? null) : pane.activeTabId;
+            pane.activeTabId === tabId ? (nextTabIds.at(-1) ?? "outputs") : pane.activeTabId;
           return {
             ...pane,
             tabIds: nextTabIds,
@@ -958,7 +966,7 @@ export function AtelierWorkbench({
     setPanes((previous) => {
       const fromPane = previous.find((pane) => pane.id === fromPaneId);
       const tabId = fromPane?.activeTabId;
-      if (!tabId) return previous;
+      if (!tabId || !isFileTabId(tabId)) return previous;
       const targetPaneId: WorkbenchPaneId = fromPaneId === "primary" ? "secondary" : "primary";
       return previous.map((pane) => {
         if (pane.id === fromPaneId) {
@@ -983,10 +991,10 @@ export function AtelierWorkbench({
 
   const openOutput = useCallback(
     (path: string) => {
-      const output = outputCandidates.find((candidate) => candidate.path === path);
-      ensureTab(makeOutputTab(path, output?.contents), activePaneId);
+      setSelectedOutputPath(path);
+      activateTab("outputs", activePaneId);
     },
-    [activePaneId, ensureTab, outputCandidates],
+    [activateTab, activePaneId],
   );
 
   useEffect(() => {
@@ -1034,7 +1042,7 @@ export function AtelierWorkbench({
   if (!expanded) {
     return (
       <aside
-        className="relative hidden h-full min-h-0 shrink-0 border-l border-border bg-card/80 text-foreground shadow-sm xl:flex xl:flex-col"
+        className="relative hidden h-full min-h-0 shrink-0 bg-transparent p-2 text-foreground xl:flex xl:flex-col"
         style={{ width: COMPACT_WORKBENCH_WIDTH }}
       >
         <div
@@ -1060,113 +1068,119 @@ export function AtelierWorkbench({
 
   return (
     <aside
-      className="relative hidden h-full min-h-0 shrink-0 flex-col border-l border-border bg-card text-foreground shadow-sm lg:flex"
+      className="relative hidden h-full min-h-0 shrink-0 flex-col bg-transparent p-2 text-foreground lg:flex"
       style={{ width }}
     >
       <div
         className="absolute inset-y-0 left-[-4px] z-20 w-2 cursor-ew-resize"
         onPointerDown={onPointerDown}
       />
-      <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2">
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="shrink-0"
-                onClick={() => setExpanded(false)}
-                aria-label="Collapse Atelier workbench"
-              >
-                <PanelRightCloseIcon />
-              </Button>
-            }
-          />
-          <TooltipPopup side="bottom">Collapse workbench</TooltipPopup>
-        </Tooltip>
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-          <span className="truncate px-1 text-xs font-medium text-muted-foreground">Workbench</span>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border/65 bg-card/85 shadow-sm backdrop-blur">
+        <div className="flex h-12 shrink-0 items-center gap-1 px-2">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0"
+                  onClick={() => setExpanded(false)}
+                  aria-label="Collapse Atelier workbench"
+                >
+                  <PanelRightCloseIcon />
+                </Button>
+              }
+            />
+            <TooltipPopup side="bottom">Collapse workbench</TooltipPopup>
+          </Tooltip>
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+            <span className="truncate px-1 text-xs font-medium text-muted-foreground">
+              Workbench
+            </span>
+          </div>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant={splitOpen && splitOrientation === "vertical" ? "secondary" : "ghost"}
+                  size="icon-sm"
+                  onClick={() => toggleSplit("vertical")}
+                  aria-label={
+                    splitOpen && splitOrientation === "vertical"
+                      ? "Unsplit workbench"
+                      : "Split workbench vertically"
+                  }
+                >
+                  <Columns2Icon />
+                </Button>
+              }
+            />
+            <TooltipPopup side="bottom">
+              {splitOpen && splitOrientation === "vertical" ? "Unsplit" : "Split vertically"}
+            </TooltipPopup>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant={splitOpen && splitOrientation === "horizontal" ? "secondary" : "ghost"}
+                  size="icon-sm"
+                  onClick={() => toggleSplit("horizontal")}
+                  aria-label={
+                    splitOpen && splitOrientation === "horizontal"
+                      ? "Unsplit workbench"
+                      : "Split workbench horizontally"
+                  }
+                >
+                  <Rows2Icon />
+                </Button>
+              }
+            />
+            <TooltipPopup side="bottom">
+              {splitOpen && splitOrientation === "horizontal" ? "Unsplit" : "Split horizontally"}
+            </TooltipPopup>
+          </Tooltip>
         </div>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant={splitOpen && splitOrientation === "vertical" ? "secondary" : "ghost"}
-                size="icon-sm"
-                onClick={() => toggleSplit("vertical")}
-                aria-label={
-                  splitOpen && splitOrientation === "vertical"
-                    ? "Unsplit workbench"
-                    : "Split workbench vertically"
-                }
-              >
-                <Columns2Icon />
-              </Button>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {splitOpen && splitOrientation === "vertical" ? "Unsplit" : "Split vertically"}
-          </TooltipPopup>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant={splitOpen && splitOrientation === "horizontal" ? "secondary" : "ghost"}
-                size="icon-sm"
-                onClick={() => toggleSplit("horizontal")}
-                aria-label={
-                  splitOpen && splitOrientation === "horizontal"
-                    ? "Unsplit workbench"
-                    : "Split workbench horizontally"
-                }
-              >
-                <Rows2Icon />
-              </Button>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {splitOpen && splitOrientation === "horizontal" ? "Unsplit" : "Split horizontally"}
-          </TooltipPopup>
-        </Tooltip>
-      </div>
-      <WorkbenchToolLauncherBar
-        activeTabId={panes.find((pane) => pane.id === activePaneId)?.activeTabId ?? null}
-        outputCount={outputCount}
-        onSelectTab={activateTab}
-      />
+        <WorkbenchToolLauncherBar
+          activeTabId={panes.find((pane) => pane.id === activePaneId)?.activeTabId ?? null}
+          outputCount={outputCount}
+          onSelectTab={activateTab}
+        />
 
-      <div
-        className={cn(
-          "min-h-0 flex-1 overflow-hidden",
-          splitOpen && splitOrientation === "horizontal" ? "flex flex-col" : "flex",
-        )}
-      >
-        {visiblePanes.map((pane) => (
-          <WorkbenchPane
-            key={pane.id}
-            pane={pane}
-            tabById={tabById}
-            activeCwd={activeCwd}
-            thread={thread}
-            threadRef={threadRef}
-            activeProject={activeProject}
-            gitStatus={gitStatus}
-            changedFiles={changedFiles}
-            turnDiffSummaries={turnDiffSummaries}
-            outputCandidates={outputCandidates}
-            renderDiffContent={renderDiffContent}
-            diffContent={diffContent}
-            splitOpen={splitOpen}
-            onActivateTab={(tabId) => activateTab(tabId, pane.id)}
-            onCloseTab={(tabId) => closeTab(tabId, pane.id)}
-            onMoveActiveTab={() => moveActiveTab(pane.id)}
-            onOpenOutput={openOutput}
-          />
-        ))}
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-hidden p-2 pt-0",
+            splitOpen && splitOrientation === "horizontal" ? "flex flex-col gap-2" : "flex gap-2",
+          )}
+        >
+          {visiblePanes.map((pane) => (
+            <WorkbenchPane
+              key={pane.id}
+              pane={pane}
+              tabById={tabById}
+              activeCwd={activeCwd}
+              thread={thread}
+              threadRef={threadRef}
+              activeProject={activeProject}
+              gitStatus={gitStatus}
+              changedFiles={changedFiles}
+              turnDiffSummaries={turnDiffSummaries}
+              outputCandidates={outputCandidates}
+              selectedOutputPath={selectedOutputPath}
+              renderDiffContent={renderDiffContent}
+              diffContent={diffContent}
+              splitOpen={splitOpen}
+              onActivateTab={(tabId) => activateTab(tabId, pane.id)}
+              onCloseTab={(tabId) => closeTab(tabId, pane.id)}
+              onMoveActiveTab={() => moveActiveTab(pane.id)}
+              onOpenOutput={openOutput}
+              onClearSelectedOutput={() => setSelectedOutputPath(null)}
+            />
+          ))}
+        </div>
       </div>
     </aside>
   );
@@ -1178,7 +1192,7 @@ function WorkbenchToolLauncherBar(props: {
   onSelectTab: (tabId: WorkbenchSingletonTabId) => void;
 }) {
   return (
-    <div className="grid h-11 shrink-0 grid-cols-4 gap-1 border-b border-border bg-card px-2 py-1.5">
+    <div className="grid h-11 shrink-0 grid-cols-4 gap-1 px-2 py-1.5">
       {DEFAULT_WORKBENCH_TABS.map((tab) => {
         const ToolIcon = tab.icon;
         const selected = props.activeTabId === tab.id;
@@ -1189,7 +1203,7 @@ function WorkbenchToolLauncherBar(props: {
             className={cn(
               "inline-flex min-w-0 items-center justify-center gap-1.5 rounded-md px-1.5 text-xs font-medium transition-colors",
               selected
-                ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+                ? "bg-background text-foreground shadow-sm ring-1 ring-border/70"
                 : "text-muted-foreground hover:bg-background/65 hover:text-foreground",
             )}
             onClick={() => props.onSelectTab(tab.id)}
@@ -1226,84 +1240,85 @@ function WorkbenchPane(props: {
   }>;
   turnDiffSummaries: readonly TurnDiffSummary[];
   outputCandidates: readonly OutputCandidate[];
+  selectedOutputPath: string | null;
   renderDiffContent: boolean;
   diffContent: ReactNode;
   splitOpen: boolean;
   onActivateTab: (tabId: WorkbenchTabId) => void;
-  onCloseTab: (tabId: WorkbenchTabId) => void;
+  onCloseTab: (tabId: WorkbenchFileTabId) => void;
   onMoveActiveTab: () => void;
   onOpenOutput: (path: string) => void;
+  onClearSelectedOutput: () => void;
 }) {
   const activeTab = props.pane.activeTabId ? props.tabById.get(props.pane.activeTabId) : undefined;
+  const showFileTabs = props.pane.tabIds.length > 0;
+  const canMoveActiveTab = props.pane.activeTabId ? isFileTabId(props.pane.activeTabId) : false;
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-border/60 first:border-l-0">
-      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-card px-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {props.pane.tabIds.map((tabId) => {
-            const tab = props.tabById.get(tabId);
-            if (!tab) return null;
-            const TabIcon = tab.icon;
-            const selected = tabId === props.pane.activeTabId;
-            return (
-              <div
-                key={tabId}
-                className={cn(
-                  "group inline-flex h-6 min-w-0 max-w-36 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs transition-colors",
-                  selected
-                    ? "bg-background text-foreground shadow-sm ring-1 ring-border"
-                    : "text-muted-foreground hover:bg-background/65 hover:text-foreground",
-                )}
-                title={tab.title}
-              >
-                <button
-                  type="button"
-                  className="inline-flex min-w-0 flex-1 items-center gap-1.5 text-left"
-                  onClick={() => props.onActivateTab(tabId)}
-                >
-                  <TabIcon className="size-3.5 shrink-0" />
-                  <span className="min-w-0 truncate">{tab.shortTitle}</span>
-                  {tab.id === "outputs" && props.outputCandidates.length > 0 ? (
-                    <span className="rounded-full bg-muted px-1.5 py-0 text-[10px] text-muted-foreground">
-                      {props.outputCandidates.length}
-                    </span>
-                  ) : null}
-                </button>
-                <button
-                  type="button"
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-background/45">
+      {showFileTabs || props.splitOpen ? (
+        <div className="flex h-10 shrink-0 items-center gap-1 px-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {props.pane.tabIds.map((tabId) => {
+              const tab = props.tabById.get(tabId);
+              if (!tab || tab.kind !== "file") return null;
+              const TabIcon = tab.icon;
+              const selected = tabId === props.pane.activeTabId;
+              return (
+                <div
+                  key={tabId}
                   className={cn(
-                    "ml-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100",
-                    selected ? "opacity-70" : "opacity-0 group-hover:opacity-100",
+                    "group inline-flex h-6 min-w-0 max-w-36 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs transition-colors",
+                    selected
+                      ? "bg-card text-foreground shadow-sm ring-1 ring-border/70"
+                      : "text-muted-foreground hover:bg-background/65 hover:text-foreground",
                   )}
-                  onClick={() => props.onCloseTab(tabId)}
-                  aria-label={`Close ${tab.title}`}
+                  title={tab.title}
                 >
-                  <XIcon className="size-3" />
-                </button>
-              </div>
-            );
-          })}
+                  <button
+                    type="button"
+                    className="inline-flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                    onClick={() => props.onActivateTab(tabId)}
+                  >
+                    <TabIcon className="size-3.5 shrink-0" />
+                    <span className="min-w-0 truncate">{tab.shortTitle}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "ml-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100",
+                      selected ? "opacity-70" : "opacity-0 group-hover:opacity-100",
+                    )}
+                    onClick={() => props.onCloseTab(tabId)}
+                    aria-label={`Close ${tab.title}`}
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          {props.splitOpen ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={props.onMoveActiveTab}
+                    disabled={!canMoveActiveTab}
+                    aria-label="Move active file tab to other pane"
+                  >
+                    {props.pane.id === "primary" ? <ArrowRightIcon /> : <ArrowLeftIcon />}
+                  </Button>
+                }
+              />
+              <TooltipPopup side="bottom">Move file tab</TooltipPopup>
+            </Tooltip>
+          ) : null}
         </div>
-        {props.splitOpen ? (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={props.onMoveActiveTab}
-                  disabled={!props.pane.activeTabId}
-                  aria-label="Move active tab to other pane"
-                >
-                  {props.pane.id === "primary" ? <ArrowRightIcon /> : <ArrowLeftIcon />}
-                </Button>
-              }
-            />
-            <TooltipPopup side="bottom">Move tab</TooltipPopup>
-          </Tooltip>
-        ) : null}
-      </div>
+      ) : null}
       <div className="min-h-0 flex-1 overflow-hidden">
         {activeTab ? (
           <WorkbenchTabContent
@@ -1316,9 +1331,11 @@ function WorkbenchPane(props: {
             changedFiles={props.changedFiles}
             turnDiffSummaries={props.turnDiffSummaries}
             outputCandidates={props.outputCandidates}
+            selectedOutputPath={props.selectedOutputPath}
             renderDiffContent={props.renderDiffContent}
             diffContent={props.diffContent}
             onOpenOutput={props.onOpenOutput}
+            onClearSelectedOutput={props.onClearSelectedOutput}
           />
         ) : (
           <EmptyWorkbenchState
@@ -1347,9 +1364,11 @@ function WorkbenchTabContent(props: {
   }>;
   turnDiffSummaries: readonly TurnDiffSummary[];
   outputCandidates: readonly OutputCandidate[];
+  selectedOutputPath: string | null;
   renderDiffContent: boolean;
   diffContent: ReactNode;
   onOpenOutput: (path: string) => void;
+  onClearSelectedOutput: () => void;
 }) {
   switch (props.tab.kind) {
     case "changes":
@@ -1365,9 +1384,13 @@ function WorkbenchTabContent(props: {
     case "outputs":
       return (
         <OutputsPanel
+          threadRef={props.threadRef}
+          activeCwd={props.activeCwd}
           thread={props.thread}
           outputCandidates={props.outputCandidates}
+          selectedOutputPath={props.selectedOutputPath}
           onOpenOutput={props.onOpenOutput}
+          onClearSelectedOutput={props.onClearSelectedOutput}
         />
       );
     case "browser":
@@ -1375,16 +1398,12 @@ function WorkbenchTabContent(props: {
     case "scratch":
       return <ScratchPanel threadRef={props.threadRef} activeProject={props.activeProject} />;
     case "file":
-    case "output":
       return (
         <FileTabPanel
           environmentId={props.threadRef.environmentId}
           activeCwd={props.activeCwd}
           path={props.tab.path}
-          {...(props.tab.kind === "output" && props.tab.contents !== undefined
-            ? { initialContents: props.tab.contents }
-            : {})}
-          output={props.tab.kind === "output"}
+          output={false}
         />
       );
   }
@@ -1415,7 +1434,7 @@ function CompactWorkbenchRail(props: {
 
   return (
     <>
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
+      <div className="mb-2 flex h-12 shrink-0 items-center justify-between rounded-lg border border-border bg-card/95 px-3 shadow-lg/10">
         <div className="min-w-0">
           <div className="truncate text-xs font-semibold text-foreground">Atelier</div>
           <div className="truncate text-[11px] text-muted-foreground">
@@ -1432,7 +1451,7 @@ function CompactWorkbenchRail(props: {
           <PanelRightOpenIcon />
         </Button>
       </div>
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
         <CompactCard title="Progress">
           <CompactStatusRow
             done
@@ -1542,7 +1561,7 @@ function CompactWorkbenchRail(props: {
 
 function CompactCard(props: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-lg border border-border bg-background/55 p-2">
+    <section className="rounded-lg border border-border bg-card/95 p-2 shadow-lg/10">
       <div className="mb-1.5 px-1 text-[11px] font-medium text-muted-foreground">{props.title}</div>
       <div className="space-y-0.5">{props.children}</div>
     </section>
@@ -1696,12 +1715,16 @@ function WorkspacePanel(props: {
   };
 
   return (
-    <WorkbenchPanelShell
-      title="Workspace"
-      subtitle={props.activeCwd ?? "Open or create a thread with a workspace"}
-      icon={FolderOpenIcon}
-      actions={
-        <div className="flex items-center gap-1">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-12 shrink-0 items-center gap-2 px-2.5">
+        <FolderOpenIcon className="size-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold text-foreground">Workspace</div>
+          <div className="truncate text-[11px] text-muted-foreground">
+            {props.activeCwd ?? "No active workspace"}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
           <Tooltip>
             <TooltipTrigger
               render={
@@ -1748,13 +1771,12 @@ function WorkspacePanel(props: {
             </Button>
           ) : null}
         </div>
-      }
-    >
-      <div className="shrink-0 border-b border-border p-3">
+      </div>
+      <div className="shrink-0 px-2.5 pb-2">
         <div className="relative">
           <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/70" />
           <Input
-            className="h-8 pl-8 text-xs"
+            className="h-8 rounded-lg border-border/55 bg-background/70 pl-8 text-xs shadow-sm"
             value={props.query}
             placeholder="Filter files and folders"
             onChange={(event) => props.onQueryChange(event.target.value)}
@@ -1770,7 +1792,7 @@ function WorkspacePanel(props: {
         ) : null}
       </div>
       <div
-        className="min-h-0 flex-1 overflow-y-auto p-2"
+        className="mx-2 mb-2 min-h-0 flex-1 overflow-y-auto rounded-xl bg-background/45 p-1.5"
         onDragOver={allowFileDrop}
         onDrop={(event) => handleDrop("", event)}
       >
@@ -1804,7 +1826,7 @@ function WorkspacePanel(props: {
               return (
                 <div
                   key={node.path}
-                  className="group flex h-7 w-full min-w-0 items-center rounded-md text-xs text-muted-foreground hover:bg-background hover:text-foreground"
+                  className="group flex h-7 w-full min-w-0 items-center rounded-md text-xs text-muted-foreground transition-colors hover:bg-card/80 hover:text-foreground"
                   onDragOver={isDirectory ? allowFileDrop : undefined}
                   onDrop={isDirectory ? (event) => handleDrop(node.path, event) : undefined}
                   title={node.path}
@@ -1858,7 +1880,7 @@ function WorkspacePanel(props: {
           </div>
         )}
       </div>
-    </WorkbenchPanelShell>
+    </div>
   );
 }
 
@@ -1952,10 +1974,18 @@ function MetricTile(props: { label: string; value: string; tone?: "add" | "del" 
 }
 
 function OutputsPanel(props: {
+  threadRef: ScopedThreadRef;
+  activeCwd: string | null;
   thread: Thread | undefined;
   outputCandidates: readonly OutputCandidate[];
+  selectedOutputPath: string | null;
   onOpenOutput: (path: string) => void;
+  onClearSelectedOutput: () => void;
 }) {
+  const selectedOutput = props.selectedOutputPath
+    ? props.outputCandidates.find((output) => output.path === props.selectedOutputPath)
+    : undefined;
+
   return (
     <WorkbenchPanelShell
       title="Artifacts"
@@ -1965,47 +1995,68 @@ function OutputsPanel(props: {
           : "Artifacts appear after a workspace session starts"
       }
       icon={SparklesIcon}
+      actions={
+        selectedOutput ? (
+          <Button type="button" variant="ghost" size="sm" onClick={props.onClearSelectedOutput}>
+            <ArrowLeftIcon />
+            <span>List</span>
+          </Button>
+        ) : null
+      }
     >
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        {props.outputCandidates.length > 0 ? (
-          <div className="space-y-2">
-            {props.outputCandidates.map((output) => {
-              const OutputIcon =
-                output.kind === "diff"
-                  ? WorkflowIcon
-                  : isImagePath(output.path)
-                    ? ImageIcon
-                    : isMarkdownPath(output.path)
-                      ? FileTextIcon
-                      : SparklesIcon;
-              return (
-                <button
-                  key={output.id}
-                  type="button"
-                  className="w-full rounded-lg border border-border bg-background/55 p-3 text-left transition-colors hover:bg-background"
-                  onClick={() => props.onOpenOutput(output.path)}
-                >
-                  <div className="flex min-w-0 items-start gap-3">
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card text-muted-foreground">
-                      <OutputIcon className="size-4" />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {selectedOutput ? (
+          <FileTabPanel
+            environmentId={props.threadRef.environmentId}
+            activeCwd={props.activeCwd}
+            path={selectedOutput.path}
+            {...(selectedOutput.contents !== undefined
+              ? { initialContents: selectedOutput.contents }
+              : {})}
+            output
+            compact
+          />
+        ) : props.outputCandidates.length > 0 ? (
+          <div className="h-full overflow-y-auto p-3">
+            <div className="space-y-2">
+              {props.outputCandidates.map((output) => {
+                const OutputIcon =
+                  output.kind === "diff"
+                    ? WorkflowIcon
+                    : isImagePath(output.path)
+                      ? ImageIcon
+                      : isMarkdownPath(output.path)
+                        ? FileTextIcon
+                        : SparklesIcon;
+                return (
+                  <button
+                    key={output.id}
+                    type="button"
+                    className="w-full rounded-lg border border-border bg-background/55 p-3 text-left transition-colors hover:bg-background"
+                    onClick={() => props.onOpenOutput(output.path)}
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card text-muted-foreground">
+                        <OutputIcon className="size-4" />
+                      </div>
+                      <div className="min-w-0 flex-1 text-left">
+                        <div className="truncate text-sm font-medium text-foreground">
+                          {output.title}
+                        </div>
+                        <div className="mt-1 truncate text-xs text-muted-foreground">
+                          {output.path}
+                        </div>
+                        <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground/75">
+                          <span>{output.subtitle}</span>
+                          <span>·</span>
+                          <span>{formatRelativeTimeLabel(output.createdAt)}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1 text-left">
-                      <div className="truncate text-sm font-medium text-foreground">
-                        {output.title}
-                      </div>
-                      <div className="mt-1 truncate text-xs text-muted-foreground">
-                        {output.path}
-                      </div>
-                      <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground/75">
-                        <span>{output.subtitle}</span>
-                        <span>·</span>
-                        <span>{formatRelativeTimeLabel(output.createdAt)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         ) : (
           <EmptyWorkbenchState
@@ -2033,6 +2084,7 @@ function FileTabPanel(props: {
   path: string;
   initialContents?: string;
   output: boolean;
+  compact?: boolean;
 }) {
   const queryClient = useQueryClient();
   const fileReadTarget = useMemo(() => {
@@ -2067,6 +2119,7 @@ function FileTabPanel(props: {
   const [lastLoadedKey, setLastLoadedKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
   useEffect(() => {
     if (!loadedFile || loadedFile.encoding !== "utf8") return;
@@ -2079,6 +2132,7 @@ function FileTabPanel(props: {
 
   const writeTarget = loadedFile?.encoding === "utf8" ? fileReadTarget : null;
   const canEdit = writeTarget !== null;
+  const isMarkdownFile = isMarkdownPath(props.path);
   const dirty = canEdit && loadedFile !== undefined && draft !== loadedFile.contents;
   const saveFile = useCallback(async () => {
     if (!canEdit || !loadedFile || !writeTarget) return;
@@ -2092,47 +2146,70 @@ function FileTabPanel(props: {
         relativePath: writeTarget.relativePath,
         contents: draft,
       });
-      await queryClient.invalidateQueries({
-        queryKey: projectQueryKeys.readFile(
-          props.environmentId,
-          writeTarget.cwd,
-          writeTarget.relativePath,
-        ),
-      });
+      const nextLoadedFile: ProjectReadFileResult = {
+        ...loadedFile,
+        contents: draft,
+        sizeBytes: new TextEncoder().encode(draft).length,
+      };
+      const nextLoadedKey = `${nextLoadedFile.relativePath}:${nextLoadedFile.sizeBytes}:${nextLoadedFile.contents}`;
+      queryClient.setQueryData(
+        projectQueryKeys.readFile(props.environmentId, writeTarget.cwd, writeTarget.relativePath),
+        nextLoadedFile,
+      );
+      setLastLoadedKey(nextLoadedKey);
+      setLastSavedAt(Date.now());
+      if (!isMarkdownFile) {
+        await queryClient.invalidateQueries({
+          queryKey: projectQueryKeys.readFile(
+            props.environmentId,
+            writeTarget.cwd,
+            writeTarget.relativePath,
+          ),
+        });
+      }
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
     }
-  }, [canEdit, draft, loadedFile, props.environmentId, queryClient, writeTarget]);
+  }, [canEdit, draft, isMarkdownFile, loadedFile, props.environmentId, queryClient, writeTarget]);
 
-  const fileIcon = isImagePath(props.path)
-    ? ImageIcon
-    : isMarkdownPath(props.path)
-      ? FileTextIcon
-      : FileIcon;
+  useEffect(() => {
+    if (!dirty || !canEdit || !isMarkdownFile) return;
+    const timeout = window.setTimeout(() => {
+      void saveFile();
+    }, 650);
+    return () => window.clearTimeout(timeout);
+  }, [canEdit, dirty, isMarkdownFile, saveFile]);
 
-  return (
-    <WorkbenchPanelShell
-      title={basename(props.path)}
-      subtitle={props.path}
-      icon={fileIcon}
-      actions={
-        canEdit ? (
-          <Button
-            type="button"
-            variant={dirty ? "default" : "ghost"}
-            size="sm"
-            onClick={saveFile}
-            disabled={!dirty || saving}
-          >
-            <SaveIcon />
-            <span>{saving ? "Saving" : "Save"}</span>
-          </Button>
-        ) : null
-      }
-    >
-      <div className="min-h-0 flex-1 overflow-hidden bg-background/45">
+  const saveStatus = saveError
+    ? saveError
+    : saving
+      ? "Saving"
+      : dirty
+        ? isMarkdownFile
+          ? "Autosave pending"
+          : "Unsaved changes"
+        : lastSavedAt && isMarkdownFile
+          ? "Saved"
+          : null;
+
+  const statusTone = saveError
+    ? "text-destructive"
+    : saving || dirty
+      ? "text-muted-foreground"
+      : "text-muted-foreground/60";
+  const fileIcon = isImagePath(props.path) ? ImageIcon : isMarkdownFile ? FileTextIcon : FileIcon;
+  const FileIconComponent = fileIcon;
+
+  const previewContent = (
+    <>
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-hidden",
+          isMarkdownFile ? "bg-transparent" : "rounded-xl border border-border/55 bg-background/60",
+        )}
+      >
         {fileQuery.isFetching && !loadedFile ? (
           <div className="space-y-2 p-4">
             {Array.from({ length: 8 }, (_, index) => (
@@ -2160,16 +2237,38 @@ function FileTabPanel(props: {
           />
         )}
       </div>
-      {saveError ? (
-        <div className="shrink-0 border-t border-border px-4 py-2 text-xs text-destructive">
-          {saveError}
-        </div>
-      ) : dirty ? (
-        <div className="shrink-0 border-t border-border px-4 py-2 text-xs text-muted-foreground">
-          Unsaved changes
-        </div>
+      {saveStatus ? (
+        <div className={cn("shrink-0 px-2 py-1 text-[10px]", statusTone)}>{saveStatus}</div>
       ) : null}
-    </WorkbenchPanelShell>
+    </>
+  );
+
+  if (props.compact) {
+    return <div className="flex h-full min-h-0 flex-col">{previewContent}</div>;
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-2 bg-transparent p-2 pt-0">
+      <div className="flex h-8 shrink-0 items-center gap-2 rounded-lg border border-border/55 bg-background/70 px-2.5 shadow-sm">
+        <FileIconComponent className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={props.path}>
+          {props.path}
+        </span>
+        {canEdit && !isMarkdownFile ? (
+          <Button
+            type="button"
+            variant={dirty ? "default" : "ghost"}
+            size="xs"
+            onClick={saveFile}
+            disabled={!dirty || saving}
+          >
+            <SaveIcon />
+            <span>{saving ? "Saving" : "Save"}</span>
+          </Button>
+        ) : null}
+      </div>
+      {previewContent}
+    </div>
   );
 }
 
@@ -2181,7 +2280,7 @@ function FilePreviewSurface(props: {
 }) {
   if (isMarkdownPath(props.file.relativePath) && props.file.encoding === "utf8") {
     return props.editable ? (
-      <LiveMarkdownEditor
+      <MarkdownPropertiesEditor
         value={props.draft}
         onChange={props.onDraftChange}
         ariaLabel={`${props.file.relativePath} Markdown editor`}
@@ -2196,7 +2295,7 @@ function FilePreviewSurface(props: {
       <iframe
         title={props.file.relativePath}
         srcDoc={props.file.contents}
-        sandbox="allow-forms allow-scripts"
+        sandbox="allow-downloads allow-forms allow-modals allow-popups allow-scripts"
         className="h-full w-full border-0 bg-background"
       />
     );
@@ -2234,6 +2333,7 @@ function FilePreviewSurface(props: {
     return (
       <textarea
         className="h-full w-full resize-none border-0 bg-card p-4 font-mono text-xs leading-5 text-foreground outline-none"
+        style={{ fontFamily: "var(--atelier-editor-font, var(--font-mono))" }}
         value={props.draft}
         readOnly={!props.editable}
         onChange={(event) => props.onDraftChange(event.target.value)}
@@ -2253,7 +2353,7 @@ function FilePreviewSurface(props: {
 
 function MarkdownPreviewSurface(props: { value: string }) {
   return (
-    <div className="h-full overflow-y-auto bg-card p-4">
+    <div className="h-full overflow-y-auto rounded-xl border border-border/55 bg-background/70 p-4 shadow-sm">
       <div className="mx-auto max-w-3xl">
         <ChatMarkdown text={props.value} cwd={undefined} />
       </div>
@@ -2261,8 +2361,232 @@ function MarkdownPreviewSurface(props: { value: string }) {
   );
 }
 
+interface MarkdownFrontmatter {
+  readonly valid: boolean;
+  readonly hasFrontmatter: boolean;
+  readonly properties: ReadonlyArray<{ key: string; value: string }>;
+  readonly body: string;
+}
+
+function parseMarkdownFrontmatter(value: string): MarkdownFrontmatter {
+  if (!value.startsWith("---\n") && !value.startsWith("---\r\n")) {
+    return { valid: true, hasFrontmatter: false, properties: [], body: value };
+  }
+  const newline = value.startsWith("---\r\n") ? "\r\n" : "\n";
+  const closing = value.indexOf(`${newline}---${newline}`, 4);
+  if (closing < 0) {
+    return { valid: false, hasFrontmatter: true, properties: [], body: value };
+  }
+  const rawProperties = value.slice(4, closing).split(/\r?\n/u);
+  const properties: Array<{ key: string; value: string }> = [];
+  for (const line of rawProperties) {
+    if (!line.trim()) continue;
+    const match = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/u);
+    if (!match) {
+      return { valid: false, hasFrontmatter: true, properties: [], body: value };
+    }
+    properties.push({ key: match[1]!, value: match[2] ?? "" });
+  }
+  return {
+    valid: true,
+    hasFrontmatter: true,
+    properties,
+    body: value.slice(closing + `${newline}---${newline}`.length),
+  };
+}
+
+function serializeMarkdownFrontmatter(
+  properties: ReadonlyArray<{ key: string; value: string }>,
+  body: string,
+): string {
+  if (properties.length === 0) return body;
+  const frontmatter = properties.map((property) => `${property.key}: ${property.value}`).join("\n");
+  return `---\n${frontmatter}\n---\n${body}`;
+}
+
+function MarkdownPropertiesEditor(props: {
+  value: string;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+}) {
+  const parsed = useMemo(() => parseMarkdownFrontmatter(props.value), [props.value]);
+  const updateProperties = useCallback(
+    (properties: ReadonlyArray<{ key: string; value: string }>) => {
+      props.onChange(serializeMarkdownFrontmatter(properties, parsed.body));
+    },
+    [parsed.body, props],
+  );
+  const updateBody = useCallback(
+    (body: string) => {
+      props.onChange(
+        parsed.hasFrontmatter && parsed.valid
+          ? serializeMarkdownFrontmatter(parsed.properties, body)
+          : body,
+      );
+    },
+    [parsed.hasFrontmatter, parsed.properties, parsed.valid, props],
+  );
+
+  if (!parsed.valid) {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-2 p-2">
+        <div className="shrink-0 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
+          Frontmatter is not editable until the YAML uses simple `key: value` lines.
+        </div>
+        <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border/55 bg-background/70 shadow-sm">
+          <LiveMarkdownEditor
+            value={props.value}
+            onChange={props.onChange}
+            ariaLabel={props.ariaLabel}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-2 bg-transparent p-2">
+      <div className="shrink-0 rounded-xl border border-border/55 bg-background/70 px-3 py-2 shadow-sm">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/65">
+            Properties
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => updateProperties([...parsed.properties, { key: "property", value: "" }])}
+          >
+            <PlusIcon />
+            <span>Add</span>
+          </Button>
+        </div>
+        {parsed.properties.length > 0 ? (
+          <div className="grid gap-1.5">
+            {parsed.properties.map((property, index) => (
+              <div
+                key={`${property.key}:${index}`}
+                className="grid grid-cols-[minmax(0,0.42fr)_minmax(0,1fr)_auto] gap-1.5"
+              >
+                <Input
+                  className="h-7 rounded-md bg-background/75 text-xs"
+                  value={property.key}
+                  onChange={(event) => {
+                    const next = [...parsed.properties];
+                    next[index] = { ...property, key: event.target.value.replace(/\s+/g, "-") };
+                    updateProperties(next);
+                  }}
+                />
+                <Input
+                  className="h-7 rounded-md bg-background/75 text-xs"
+                  value={property.value}
+                  onChange={(event) => {
+                    const next = [...parsed.properties];
+                    next[index] = { ...property, value: event.target.value };
+                    updateProperties(next);
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Remove ${property.key}`}
+                  onClick={() => updateProperties(parsed.properties.filter((_, i) => i !== index))}
+                >
+                  <XIcon />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-muted-foreground/75">No properties.</div>
+        )}
+      </div>
+      <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border/55 bg-background/70 shadow-sm">
+        <LiveMarkdownEditor value={parsed.body} onChange={updateBody} ariaLabel={props.ariaLabel} />
+      </div>
+    </div>
+  );
+}
+
 const MARKDOWN_EDITOR_EXTERNAL_UPDATE_TAG = "atelier-markdown-external-update";
-const MARKDOWN_EDITOR_TRANSFORMERS = TRANSFORMERS;
+
+class MarkdownHorizontalRuleNode extends DecoratorNode<ReactNode> {
+  static override getType(): string {
+    return "atelier-horizontal-rule";
+  }
+
+  static override clone(node: MarkdownHorizontalRuleNode): MarkdownHorizontalRuleNode {
+    return new MarkdownHorizontalRuleNode(node.__key);
+  }
+
+  static override importDOM(): DOMConversionMap | null {
+    return {
+      hr: () => ({
+        conversion: () => ({ node: $createMarkdownHorizontalRuleNode() }),
+        priority: 0,
+      }),
+    };
+  }
+
+  static override importJSON(_serializedNode: SerializedLexicalNode): MarkdownHorizontalRuleNode {
+    return $createMarkdownHorizontalRuleNode();
+  }
+
+  override exportJSON(): SerializedLexicalNode {
+    return {
+      type: "atelier-horizontal-rule",
+      version: 1,
+    };
+  }
+
+  override exportDOM(): DOMExportOutput {
+    return { element: document.createElement("hr") };
+  }
+
+  override createDOM(): HTMLElement {
+    const element = document.createElement("div");
+    element.className = "px-1 py-2";
+    return element;
+  }
+
+  override updateDOM(): false {
+    return false;
+  }
+
+  override decorate(): ReactNode {
+    return <hr className="border-0 border-t border-border/70" />;
+  }
+}
+
+function $createMarkdownHorizontalRuleNode(): MarkdownHorizontalRuleNode {
+  return $applyNodeReplacement(new MarkdownHorizontalRuleNode());
+}
+
+function $isMarkdownHorizontalRuleNode(
+  node: LexicalNode | null | undefined,
+): node is MarkdownHorizontalRuleNode {
+  return node instanceof MarkdownHorizontalRuleNode;
+}
+
+const HORIZONTAL_RULE_TRANSFORMER: ElementTransformer = {
+  dependencies: [MarkdownHorizontalRuleNode],
+  export: (node) => ($isMarkdownHorizontalRuleNode(node) ? "---" : null),
+  regExp: /^(?:-{3,}|\*{3,}|_{3,})\s*$/,
+  replace: (parentNode, _children, _match, isImport) => {
+    const horizontalRuleNode = $createMarkdownHorizontalRuleNode();
+    parentNode.replace(horizontalRuleNode);
+
+    if (!isImport) {
+      const paragraphNode = $createParagraphNode();
+      horizontalRuleNode.insertAfter(paragraphNode);
+      paragraphNode.select();
+    }
+  },
+  type: "element",
+};
+
+const MARKDOWN_EDITOR_TRANSFORMERS: Transformer[] = [HORIZONTAL_RULE_TRANSFORMER, ...TRANSFORMERS];
 const MARKDOWN_EDITOR_THEME: EditorThemeClasses = {
   code: "my-3 block overflow-x-auto rounded-md border border-border bg-muted/45 px-3 py-2 font-mono text-xs leading-5 text-foreground",
   heading: {
@@ -2273,6 +2597,8 @@ const MARKDOWN_EDITOR_THEME: EditorThemeClasses = {
     h5: "mt-3 mb-1 text-sm font-semibold leading-snug text-foreground",
     h6: "mt-3 mb-1 text-xs font-semibold uppercase leading-snug text-muted-foreground",
   },
+  hr: "my-4 border-0 border-t border-border/70",
+  hrSelected: "ring-2 ring-primary/25 ring-offset-2 ring-offset-background",
   link: "text-primary underline underline-offset-2",
   list: {
     checklist: "my-2 space-y-1 pl-1",
@@ -2318,7 +2644,15 @@ function LiveMarkdownEditor(props: {
         $convertFromMarkdownString(initialMarkdown, MARKDOWN_EDITOR_TRANSFORMERS, undefined, true);
       },
       namespace: "AtelierMarkdownEditor",
-      nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode, LinkNode],
+      nodes: [
+        HeadingNode,
+        QuoteNode,
+        ListNode,
+        ListItemNode,
+        CodeNode,
+        LinkNode,
+        MarkdownHorizontalRuleNode,
+      ],
       onError(error) {
         throw error;
       },
@@ -2329,18 +2663,19 @@ function LiveMarkdownEditor(props: {
 
   return (
     <LexicalComposer initialConfig={initialConfig}>
-      <div className="relative h-full bg-card">
+      <div className="relative h-full bg-transparent">
         <RichTextPlugin
           contentEditable={
             <ContentEditable
-              className="h-full overflow-y-auto px-5 py-4 text-foreground outline-none [caret-color:var(--foreground)] [&_*::selection]:bg-primary/20"
+              className="h-full overflow-y-auto px-4 py-3 text-sm leading-6 text-foreground outline-none [caret-color:var(--foreground)] [&_*::selection]:bg-primary/20"
+              style={{ fontFamily: "var(--atelier-editor-font, inherit)" }}
               aria-placeholder="Start writing..."
               placeholder={<span />}
               spellCheck
             />
           }
           placeholder={
-            <div className="pointer-events-none absolute top-4 left-5 text-sm text-muted-foreground/45">
+            <div className="pointer-events-none absolute top-3 left-4 text-sm text-muted-foreground/45">
               Start writing...
             </div>
           }
@@ -2467,7 +2802,9 @@ function BrowserPanel(props: { threadRef: ScopedThreadRef }) {
           <div className="flex h-full min-h-0 flex-col">
             <div className="flex shrink-0 items-center justify-between border-b border-border/70 px-3 py-1.5 text-[11px] text-muted-foreground">
               <span className="truncate">
-                Some sites block embedding. Use external open if the frame stays blank.
+                {isElectron
+                  ? "Desktop browser surface"
+                  : "Some sites block embedding. Use external open if the frame stays blank."}
               </span>
               <button
                 type="button"
@@ -2478,12 +2815,22 @@ function BrowserPanel(props: { threadRef: ScopedThreadRef }) {
                 External
               </button>
             </div>
-            <iframe
-              title={browserTarget.url}
-              src={browserTarget.url}
-              sandbox="allow-forms allow-same-origin allow-scripts"
-              className="min-h-0 flex-1 border-0 bg-background"
-            />
+            {isElectron ? (
+              <webview
+                title={browserTarget.url}
+                src={browserTarget.url}
+                partition="persist:atelier-workbench-browser"
+                allowpopups={true}
+                className="min-h-0 flex-1 border-0 bg-background"
+              />
+            ) : (
+              <iframe
+                title={browserTarget.url}
+                src={browserTarget.url}
+                sandbox="allow-forms allow-same-origin allow-scripts"
+                className="min-h-0 flex-1 border-0 bg-background"
+              />
+            )}
           </div>
         ) : (
           <div className="flex h-full items-center justify-center p-6">

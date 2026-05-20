@@ -93,6 +93,17 @@ const THEME_OPTIONS = [
   },
 ] as const;
 
+const LIGHT_APPEARANCE_OPTIONS = [
+  { value: "paper", label: "Paper" },
+  { value: "white", label: "White" },
+  { value: "glass", label: "Glass" },
+] as const;
+
+const DARK_APPEARANCE_OPTIONS = [
+  { value: "gray", label: "Dark gray" },
+  { value: "black", label: "Full black" },
+] as const;
+
 const TIMESTAMP_FORMAT_LABELS = {
   locale: "System default",
   "12-hour": "12-hour",
@@ -428,9 +439,25 @@ export function useSettingsRestore(onRestored?: () => void) {
         ? ["Delete confirmation"]
         : []),
       ...(isGitWritingModelDirty ? ["Git writing model"] : []),
+      ...(settings.appearanceUiFont !== DEFAULT_UNIFIED_SETTINGS.appearanceUiFont ||
+      settings.appearanceEditorFont !== DEFAULT_UNIFIED_SETTINGS.appearanceEditorFont ||
+      settings.appearanceChatFont !== DEFAULT_UNIFIED_SETTINGS.appearanceChatFont ||
+      settings.appearanceAccentColor !== DEFAULT_UNIFIED_SETTINGS.appearanceAccentColor ||
+      settings.appearanceBackgroundColor !== DEFAULT_UNIFIED_SETTINGS.appearanceBackgroundColor ||
+      settings.appearanceLightVariant !== DEFAULT_UNIFIED_SETTINGS.appearanceLightVariant ||
+      settings.appearanceDarkVariant !== DEFAULT_UNIFIED_SETTINGS.appearanceDarkVariant
+        ? ["Appearance"]
+        : []),
     ],
     [
       isGitWritingModelDirty,
+      settings.appearanceAccentColor,
+      settings.appearanceBackgroundColor,
+      settings.appearanceChatFont,
+      settings.appearanceDarkVariant,
+      settings.appearanceEditorFont,
+      settings.appearanceLightVariant,
+      settings.appearanceUiFont,
       settings.autoOpenPlanSidebar,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
@@ -472,6 +499,13 @@ export function useSettingsRestore(onRestored?: () => void) {
       confirmThreadArchive: DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive,
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
+      appearanceUiFont: DEFAULT_UNIFIED_SETTINGS.appearanceUiFont,
+      appearanceEditorFont: DEFAULT_UNIFIED_SETTINGS.appearanceEditorFont,
+      appearanceChatFont: DEFAULT_UNIFIED_SETTINGS.appearanceChatFont,
+      appearanceAccentColor: DEFAULT_UNIFIED_SETTINGS.appearanceAccentColor,
+      appearanceBackgroundColor: DEFAULT_UNIFIED_SETTINGS.appearanceBackgroundColor,
+      appearanceLightVariant: DEFAULT_UNIFIED_SETTINGS.appearanceLightVariant,
+      appearanceDarkVariant: DEFAULT_UNIFIED_SETTINGS.appearanceDarkVariant,
     });
     onRestored?.();
   }, [changedSettingLabels, onRestored, setTheme, updateSettings]);
@@ -933,6 +967,227 @@ export function GeneralSettingsPanel() {
                 }}
               />
             </div>
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Appearance">
+        <SettingsRow
+          title="Light look"
+          description="Choose the base surface treatment used in light mode."
+          resetAction={
+            settings.appearanceLightVariant !== DEFAULT_UNIFIED_SETTINGS.appearanceLightVariant ? (
+              <SettingResetButton
+                label="light appearance"
+                onClick={() =>
+                  updateSettings({
+                    appearanceLightVariant: DEFAULT_UNIFIED_SETTINGS.appearanceLightVariant,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.appearanceLightVariant}
+              onValueChange={(value) => {
+                if (value === "paper" || value === "white" || value === "glass") {
+                  updateSettings({ appearanceLightVariant: value });
+                }
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-40" aria-label="Light appearance">
+                <SelectValue>
+                  {LIGHT_APPEARANCE_OPTIONS.find(
+                    (option) => option.value === settings.appearanceLightVariant,
+                  )?.label ?? "Paper"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                {LIGHT_APPEARANCE_OPTIONS.map((option) => (
+                  <SelectItem hideIndicator key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          }
+        />
+
+        <SettingsRow
+          title="Dark look"
+          description="Choose the base surface treatment used in dark mode."
+          resetAction={
+            settings.appearanceDarkVariant !== DEFAULT_UNIFIED_SETTINGS.appearanceDarkVariant ? (
+              <SettingResetButton
+                label="dark appearance"
+                onClick={() =>
+                  updateSettings({
+                    appearanceDarkVariant: DEFAULT_UNIFIED_SETTINGS.appearanceDarkVariant,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.appearanceDarkVariant}
+              onValueChange={(value) => {
+                if (value === "gray" || value === "black") {
+                  updateSettings({ appearanceDarkVariant: value });
+                }
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-40" aria-label="Dark appearance">
+                <SelectValue>
+                  {DARK_APPEARANCE_OPTIONS.find(
+                    (option) => option.value === settings.appearanceDarkVariant,
+                  )?.label ?? "Dark gray"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                {DARK_APPEARANCE_OPTIONS.map((option) => (
+                  <SelectItem hideIndicator key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          }
+        />
+
+        <SettingsRow
+          title="UI font"
+          description="CSS font stack for navigation, controls, and settings."
+          resetAction={
+            settings.appearanceUiFont !== DEFAULT_UNIFIED_SETTINGS.appearanceUiFont ? (
+              <SettingResetButton
+                label="UI font"
+                onClick={() =>
+                  updateSettings({ appearanceUiFont: DEFAULT_UNIFIED_SETTINGS.appearanceUiFont })
+                }
+              />
+            ) : null
+          }
+          control={
+            <DraftInput
+              className="w-full sm:w-72"
+              value={settings.appearanceUiFont}
+              onCommit={(next) => updateSettings({ appearanceUiFont: next })}
+              placeholder="System font"
+              spellCheck={false}
+              aria-label="UI font"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Editor font"
+          description="CSS font stack for file editors and Markdown editing."
+          resetAction={
+            settings.appearanceEditorFont !== DEFAULT_UNIFIED_SETTINGS.appearanceEditorFont ? (
+              <SettingResetButton
+                label="editor font"
+                onClick={() =>
+                  updateSettings({
+                    appearanceEditorFont: DEFAULT_UNIFIED_SETTINGS.appearanceEditorFont,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <DraftInput
+              className="w-full sm:w-72"
+              value={settings.appearanceEditorFont}
+              onCommit={(next) => updateSettings({ appearanceEditorFont: next })}
+              placeholder="Mono font"
+              spellCheck={false}
+              aria-label="Editor font"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Chat font"
+          description="CSS font stack for assistant and user message content."
+          resetAction={
+            settings.appearanceChatFont !== DEFAULT_UNIFIED_SETTINGS.appearanceChatFont ? (
+              <SettingResetButton
+                label="chat font"
+                onClick={() =>
+                  updateSettings({
+                    appearanceChatFont: DEFAULT_UNIFIED_SETTINGS.appearanceChatFont,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <DraftInput
+              className="w-full sm:w-72"
+              value={settings.appearanceChatFont}
+              onCommit={(next) => updateSettings({ appearanceChatFont: next })}
+              placeholder="Default message font"
+              spellCheck={false}
+              aria-label="Chat font"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Accent color"
+          description="Optional CSS color used for primary controls and focus rings."
+          resetAction={
+            settings.appearanceAccentColor !== DEFAULT_UNIFIED_SETTINGS.appearanceAccentColor ? (
+              <SettingResetButton
+                label="accent color"
+                onClick={() =>
+                  updateSettings({
+                    appearanceAccentColor: DEFAULT_UNIFIED_SETTINGS.appearanceAccentColor,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <DraftInput
+              className="w-full sm:w-48"
+              value={settings.appearanceAccentColor}
+              onCommit={(next) => updateSettings({ appearanceAccentColor: next })}
+              placeholder="#2563eb"
+              spellCheck={false}
+              aria-label="Accent color"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Background color"
+          description="Optional CSS color used for the app background."
+          resetAction={
+            settings.appearanceBackgroundColor !==
+            DEFAULT_UNIFIED_SETTINGS.appearanceBackgroundColor ? (
+              <SettingResetButton
+                label="background color"
+                onClick={() =>
+                  updateSettings({
+                    appearanceBackgroundColor:
+                      DEFAULT_UNIFIED_SETTINGS.appearanceBackgroundColor,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <DraftInput
+              className="w-full sm:w-48"
+              value={settings.appearanceBackgroundColor}
+              onCommit={(next) => updateSettings({ appearanceBackgroundColor: next })}
+              placeholder="#ffffff"
+              spellCheck={false}
+              aria-label="Background color"
+            />
           }
         />
       </SettingsSection>

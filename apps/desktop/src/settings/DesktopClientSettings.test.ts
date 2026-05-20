@@ -12,6 +12,13 @@ import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopClientSettings from "./DesktopClientSettings.ts";
 
 const clientSettings: ClientSettings = {
+  appearanceAccentColor: "",
+  appearanceBackgroundColor: "",
+  appearanceChatFont: "",
+  appearanceDarkVariant: "gray",
+  appearanceEditorFont: "",
+  appearanceLightVariant: "paper",
+  appearanceUiFont: "",
   autoOpenPlanSidebar: false,
   composerSendShortcut: "cmd-enter",
   confirmThreadArchive: true,

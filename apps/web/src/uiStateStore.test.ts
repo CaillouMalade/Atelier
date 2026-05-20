@@ -26,6 +26,8 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     projectOrder: [],
     pinnedProjectIds: [],
     projectAppearanceById: {},
+    projectGroupExpandedById: {},
+    projectGroupAppearanceById: {},
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
     defaultAdvertisedEndpointKey: null,

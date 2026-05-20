@@ -21,19 +21,39 @@ export interface PersistedUiState {
   projectOrderCwds?: string[];
   pinnedProjectIds?: string[];
   projectAppearanceById?: Record<string, ProjectAppearance>;
+  projectGroupExpandedById?: Record<string, boolean>;
+  projectGroupAppearanceById?: Record<string, ProjectAppearance>;
   defaultAdvertisedEndpointKey?: string | null;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
   workspaceFileDrawerOpen?: boolean;
 }
 
-export type ProjectAppearanceIcon = "folder" | "code" | "server" | "book" | "sparkles" | "globe";
+export type ProjectAppearanceIcon =
+  | "folder"
+  | "code"
+  | "server"
+  | "book"
+  | "sparkles"
+  | "globe"
+  | "database"
+  | "layers"
+  | "box"
+  | "wrench"
+  | "rocket"
+  | "pen";
 export type ProjectAppearanceColor =
   | "slate"
   | "emerald"
   | "sky"
   | "violet"
   | "amber"
-  | "rose";
+  | "rose"
+  | "teal"
+  | "cyan"
+  | "fuchsia"
+  | "lime"
+  | "orange"
+  | "zinc";
 
 export interface ProjectAppearance {
   icon: ProjectAppearanceIcon;
@@ -45,6 +65,8 @@ export interface UiProjectState {
   projectOrder: string[];
   pinnedProjectIds: string[];
   projectAppearanceById: Record<string, ProjectAppearance>;
+  projectGroupExpandedById: Record<string, boolean>;
+  projectGroupAppearanceById: Record<string, ProjectAppearance>;
 }
 
 export interface UiThreadState {
@@ -80,6 +102,8 @@ const initialState: UiState = {
   projectOrder: [],
   pinnedProjectIds: [],
   projectAppearanceById: {},
+  projectGroupExpandedById: {},
+  projectGroupAppearanceById: {},
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},
   defaultAdvertisedEndpointKey: null,
@@ -127,6 +151,10 @@ function readPersistedState(): UiState {
           : null,
       pinnedProjectIds: sanitizePersistedPinnedProjectIds(parsed.pinnedProjectIds),
       projectAppearanceById: sanitizePersistedProjectAppearance(parsed.projectAppearanceById),
+      projectGroupExpandedById: sanitizePersistedBooleanRecord(parsed.projectGroupExpandedById),
+      projectGroupAppearanceById: sanitizePersistedProjectAppearance(
+        parsed.projectGroupAppearanceById,
+      ),
       threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
         parsed.threadChangedFilesExpandedById,
       ),
@@ -144,7 +172,13 @@ function isProjectAppearanceIcon(value: unknown): value is ProjectAppearanceIcon
     value === "server" ||
     value === "book" ||
     value === "sparkles" ||
-    value === "globe"
+    value === "globe" ||
+    value === "database" ||
+    value === "layers" ||
+    value === "box" ||
+    value === "wrench" ||
+    value === "rocket" ||
+    value === "pen"
   );
 }
 
@@ -155,7 +189,13 @@ function isProjectAppearanceColor(value: unknown): value is ProjectAppearanceCol
     value === "sky" ||
     value === "violet" ||
     value === "amber" ||
-    value === "rose"
+    value === "rose" ||
+    value === "teal" ||
+    value === "cyan" ||
+    value === "fuchsia" ||
+    value === "lime" ||
+    value === "orange" ||
+    value === "zinc"
   );
 }
 
@@ -196,6 +236,19 @@ function sanitizePersistedProjectAppearance(
       icon: (appearance as ProjectAppearance).icon,
       color: (appearance as ProjectAppearance).color,
     };
+  }
+  return result;
+}
+
+function sanitizePersistedBooleanRecord(value: unknown): Record<string, boolean> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+  const result: Record<string, boolean> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (key && typeof item === "boolean") {
+      result[key] = item;
+    }
   }
   return result;
 }
@@ -284,6 +337,8 @@ export function persistState(state: UiState): void {
         projectOrderCwds,
         pinnedProjectIds: state.pinnedProjectIds,
         projectAppearanceById: state.projectAppearanceById,
+        projectGroupExpandedById: state.projectGroupExpandedById,
+        projectGroupAppearanceById: state.projectGroupAppearanceById,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
         threadChangedFilesExpandedById,
         workspaceFileDrawerOpen: state.workspaceFileDrawerOpen,
@@ -748,6 +803,35 @@ export function setProjectAppearance(
   };
 }
 
+export function toggleProjectGroup(state: UiState, groupId: string): UiState {
+  const expanded = state.projectGroupExpandedById[groupId] ?? true;
+  return {
+    ...state,
+    projectGroupExpandedById: {
+      ...state.projectGroupExpandedById,
+      [groupId]: !expanded,
+    },
+  };
+}
+
+export function setProjectGroupAppearance(
+  state: UiState,
+  groupId: string,
+  appearance: ProjectAppearance,
+): UiState {
+  const current = state.projectGroupAppearanceById[groupId];
+  if (current?.icon === appearance.icon && current.color === appearance.color) {
+    return state;
+  }
+  return {
+    ...state,
+    projectGroupAppearanceById: {
+      ...state.projectGroupAppearanceById,
+      [groupId]: appearance,
+    },
+  };
+}
+
 export function reorderProjects(
   state: UiState,
   draggedProjectIds: readonly string[],
@@ -804,6 +888,8 @@ interface UiStateStore extends UiState {
   setProjectExpanded: (projectId: string, expanded: boolean) => void;
   setProjectPinned: (projectId: string, pinned: boolean) => void;
   setProjectAppearance: (projectId: string, appearance: ProjectAppearance) => void;
+  toggleProjectGroup: (groupId: string) => void;
+  setProjectGroupAppearance: (groupId: string, appearance: ProjectAppearance) => void;
   reorderProjects: (
     draggedProjectIds: readonly string[],
     targetProjectIds: readonly string[],
@@ -831,6 +917,9 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => setProjectPinned(state, projectId, pinned)),
   setProjectAppearance: (projectId, appearance) =>
     set((state) => setProjectAppearance(state, projectId, appearance)),
+  toggleProjectGroup: (groupId) => set((state) => toggleProjectGroup(state, groupId)),
+  setProjectGroupAppearance: (groupId, appearance) =>
+    set((state) => setProjectGroupAppearance(state, groupId, appearance)),
   reorderProjects: (draggedProjectIds, targetProjectIds) =>
     set((state) => reorderProjects(state, draggedProjectIds, targetProjectIds)),
 }));

@@ -622,6 +622,13 @@ describe("wsApi", () => {
 
   it("reads and writes persistence through the desktop bridge when available", async () => {
     const clientSettings = {
+      appearanceAccentColor: "",
+      appearanceBackgroundColor: "",
+      appearanceChatFont: "",
+      appearanceDarkVariant: "gray" as const,
+      appearanceEditorFont: "",
+      appearanceLightVariant: "paper" as const,
+      appearanceUiFont: "",
       autoOpenPlanSidebar: false,
       composerSendShortcut: "cmd-enter" as const,
       confirmThreadArchive: true,
@@ -635,6 +642,8 @@ describe("wsApi", () => {
       sidebarProjectGroupingOverrides: {
         "environment-local:/tmp/project": "separate" as const,
       },
+      sidebarProjectUiGroupAssignments: {},
+      sidebarProjectUiGroups: [],
       sidebarProjectSortOrder: "manual" as const,
       sidebarThreadSortOrder: "created_at" as const,
       sidebarThreadPreviewCount: 6,
@@ -686,6 +695,13 @@ describe("wsApi", () => {
     const { createLocalApi } = await import("./localApi");
     const api = createLocalApi(rpcClientMock as never);
     const clientSettings = {
+      appearanceAccentColor: "",
+      appearanceBackgroundColor: "",
+      appearanceChatFont: "",
+      appearanceDarkVariant: "gray" as const,
+      appearanceEditorFont: "",
+      appearanceLightVariant: "paper" as const,
+      appearanceUiFont: "",
       autoOpenPlanSidebar: false,
       composerSendShortcut: "cmd-enter" as const,
       confirmThreadArchive: true,
@@ -699,6 +715,8 @@ describe("wsApi", () => {
       sidebarProjectGroupingOverrides: {
         "environment-local:/tmp/project": "separate" as const,
       },
+      sidebarProjectUiGroupAssignments: {},
+      sidebarProjectUiGroups: [],
       sidebarProjectSortOrder: "manual" as const,
       sidebarThreadSortOrder: "created_at" as const,
       sidebarThreadPreviewCount: 6,

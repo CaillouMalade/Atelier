@@ -103,6 +103,15 @@ function RootRouteView() {
   const pathname = useLocation({ select: (location) => location.pathname });
   const { authGateState } = Route.useRouteContext();
   const primaryEnvironmentAuthenticated = authGateState.status === "authenticated";
+  const appearanceSettings = useSettings((settings) => ({
+    uiFont: settings.appearanceUiFont,
+    editorFont: settings.appearanceEditorFont,
+    chatFont: settings.appearanceChatFont,
+    accentColor: settings.appearanceAccentColor,
+    backgroundColor: settings.appearanceBackgroundColor,
+    lightVariant: settings.appearanceLightVariant,
+    darkVariant: settings.appearanceDarkVariant,
+  }));
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -112,6 +121,38 @@ function RootRouteView() {
       window.cancelAnimationFrame(frame);
     };
   }, [pathname]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const isDark = root.classList.contains("dark");
+    const lightBackground =
+      appearanceSettings.lightVariant === "white"
+        ? "#ffffff"
+        : appearanceSettings.lightVariant === "glass"
+          ? "color-mix(in srgb, #f5f2ec 84%, transparent)"
+          : "#f5f2ec";
+    const darkBackground = appearanceSettings.darkVariant === "black" ? "#000000" : "#111312";
+    const background =
+      appearanceSettings.backgroundColor.trim() || (isDark ? darkBackground : lightBackground);
+    const accent = appearanceSettings.accentColor.trim();
+    const uiFont = appearanceSettings.uiFont.trim();
+    const editorFont = appearanceSettings.editorFont.trim();
+    const chatFont = appearanceSettings.chatFont.trim();
+    root.style.setProperty("--background", background);
+    root.style.setProperty("--app-chrome-background", background);
+    if (accent) {
+      root.style.setProperty("--primary", accent);
+      root.style.setProperty("--ring", accent);
+    } else {
+      root.style.removeProperty("--primary");
+      root.style.removeProperty("--ring");
+    }
+    root.style.setProperty("--atelier-ui-font", uiFont || "inherit");
+    root.style.setProperty("--atelier-editor-font", editorFont || "inherit");
+    root.style.setProperty("--atelier-chat-font", chatFont || "inherit");
+    document.body.style.fontFamily = uiFont || "";
+    syncBrowserChromeTheme();
+  }, [appearanceSettings]);
 
   if (pathname === "/pair") {
     return <Outlet />;

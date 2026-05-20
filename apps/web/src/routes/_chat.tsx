@@ -14,6 +14,7 @@ import { useThreadSelectionStore } from "../threadSelectionStore";
 import { resolveSidebarNewThreadEnvMode } from "~/components/Sidebar.logic";
 import { useSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "~/rpc/serverState";
+import { useUiStateStore } from "../uiStateStore";
 
 function ChatRouteGlobalShortcuts() {
   const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
@@ -27,6 +28,7 @@ function ChatRouteGlobalShortcuts() {
       : false,
   );
   const appSettings = useSettings();
+  const setWorkspaceFileDrawerOpen = useUiStateStore((state) => state.setWorkspaceFileDrawerOpen);
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -75,6 +77,13 @@ function ChatRouteGlobalShortcuts() {
           }),
           handleNewThread,
         });
+        return;
+      }
+
+      if (command === "workspace.files.open") {
+        event.preventDefault();
+        event.stopPropagation();
+        setWorkspaceFileDrawerOpen(true);
       }
     };
 
@@ -90,6 +99,7 @@ function ChatRouteGlobalShortcuts() {
     keybindings,
     defaultProjectRef,
     selectedThreadKeysSize,
+    setWorkspaceFileDrawerOpen,
     terminalOpen,
     appSettings.defaultThreadEnvMode,
   ]);

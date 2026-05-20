@@ -178,7 +178,7 @@ describe("KeybindingsSettings.logic", () => {
           },
         },
         {
-          command: "chat.new",
+          command: "workspace.files.open",
           shortcut: {
             key: "o",
             modKey: true,

@@ -206,6 +206,10 @@ export function getProviderInstanceModels(
   return getProviderInstanceEntry(providers, instanceId)?.models ?? [];
 }
 
+export function isProviderInstanceSendable(entry: ProviderInstanceEntry): boolean {
+  return entry.enabled && entry.isAvailable && entry.status === "ready";
+}
+
 /**
  * Resolve the routing key for a selection that may reference an instance
  * id that no longer exists (e.g. a persisted thread selection after the
@@ -217,16 +221,14 @@ export function resolveSelectableProviderInstance(
   instanceId: ProviderInstanceId | undefined,
 ): ProviderInstanceId | undefined {
   if (instanceId === undefined) {
-    return deriveProviderInstanceEntries(providers).find(
-      (entry) => entry.enabled && entry.isAvailable,
-    )?.instanceId;
+    return deriveProviderInstanceEntries(providers).find(isProviderInstanceSendable)?.instanceId;
   }
   const entries = deriveProviderInstanceEntries(providers);
   const requested = entries.find((entry) => entry.instanceId === instanceId);
-  if (requested && requested.enabled && requested.isAvailable) {
+  if (requested && isProviderInstanceSendable(requested)) {
     return instanceId;
   }
-  return entries.find((entry) => entry.enabled && entry.isAvailable)?.instanceId;
+  return entries.find(isProviderInstanceSendable)?.instanceId;
 }
 
 /**
@@ -240,7 +242,9 @@ export function resolveProviderDriverKindForInstanceSelection(
   providers: ReadonlyArray<ServerProvider>,
   selection: ProviderInstanceId | ProviderDriverKind | null | undefined,
 ): ProviderDriverKind | undefined {
-  const matchedEntry = entries.find((entry) => entry.instanceId === selection);
+  const matchedEntry = entries.find(
+    (entry) => entry.instanceId === selection && isProviderInstanceSendable(entry),
+  );
   if (matchedEntry) {
     return matchedEntry.driverKind;
   }

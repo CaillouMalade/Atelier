@@ -28,6 +28,11 @@ export const SidebarProjectGroupingMode = Schema.Literals([
 ]);
 export type SidebarProjectGroupingMode = typeof SidebarProjectGroupingMode.Type;
 export const DEFAULT_SIDEBAR_PROJECT_GROUPING_MODE: SidebarProjectGroupingMode = "repository";
+export const SidebarProjectUiGroup = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+});
+export type SidebarProjectUiGroup = typeof SidebarProjectUiGroup.Type;
 export const MIN_SIDEBAR_THREAD_PREVIEW_COUNT = 1;
 export const MAX_SIDEBAR_THREAD_PREVIEW_COUNT = 15;
 export const SidebarThreadPreviewCount = Schema.Int.check(
@@ -43,8 +48,24 @@ export const ComposerSendShortcut = Schema.Literals(["enter", "cmd-enter"]);
 export type ComposerSendShortcut = typeof ComposerSendShortcut.Type;
 export const DEFAULT_COMPOSER_SEND_SHORTCUT: ComposerSendShortcut = "enter";
 
+export const AppearanceLightVariant = Schema.Literals(["paper", "white", "glass"]);
+export type AppearanceLightVariant = typeof AppearanceLightVariant.Type;
+export const AppearanceDarkVariant = Schema.Literals(["gray", "black"]);
+export type AppearanceDarkVariant = typeof AppearanceDarkVariant.Type;
+
 export const ClientSettingsSchema = Schema.Struct({
   autoOpenPlanSidebar: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  appearanceUiFont: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  appearanceEditorFont: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  appearanceChatFont: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  appearanceAccentColor: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  appearanceBackgroundColor: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  appearanceLightVariant: AppearanceLightVariant.pipe(
+    Schema.withDecodingDefault(Effect.succeed("paper" as const)),
+  ),
+  appearanceDarkVariant: AppearanceDarkVariant.pipe(
+    Schema.withDecodingDefault(Effect.succeed("gray" as const)),
+  ),
   composerSendShortcut: ComposerSendShortcut.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_COMPOSER_SEND_SHORTCUT)),
   ),
@@ -86,6 +107,13 @@ export const ClientSettingsSchema = Schema.Struct({
   sidebarProjectGroupingOverrides: Schema.Record(
     TrimmedNonEmptyString,
     SidebarProjectGroupingMode,
+  ).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  sidebarProjectUiGroups: Schema.Array(SidebarProjectUiGroup).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  sidebarProjectUiGroupAssignments: Schema.Record(
+    TrimmedNonEmptyString,
+    TrimmedNonEmptyString,
   ).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   sidebarProjectSortOrder: SidebarProjectSortOrder.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_PROJECT_SORT_ORDER)),
@@ -649,6 +677,13 @@ export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
 export const ClientSettingsPatch = Schema.Struct({
   autoOpenPlanSidebar: Schema.optionalKey(Schema.Boolean),
+  appearanceUiFont: Schema.optionalKey(TrimmedString),
+  appearanceEditorFont: Schema.optionalKey(TrimmedString),
+  appearanceChatFont: Schema.optionalKey(TrimmedString),
+  appearanceAccentColor: Schema.optionalKey(TrimmedString),
+  appearanceBackgroundColor: Schema.optionalKey(TrimmedString),
+  appearanceLightVariant: Schema.optionalKey(AppearanceLightVariant),
+  appearanceDarkVariant: Schema.optionalKey(AppearanceDarkVariant),
   composerSendShortcut: Schema.optionalKey(ComposerSendShortcut),
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
@@ -678,6 +713,10 @@ export const ClientSettingsPatch = Schema.Struct({
   sidebarProjectGroupingMode: Schema.optionalKey(SidebarProjectGroupingMode),
   sidebarProjectGroupingOverrides: Schema.optionalKey(
     Schema.Record(TrimmedNonEmptyString, SidebarProjectGroupingMode),
+  ),
+  sidebarProjectUiGroups: Schema.optionalKey(Schema.Array(SidebarProjectUiGroup)),
+  sidebarProjectUiGroupAssignments: Schema.optionalKey(
+    Schema.Record(TrimmedNonEmptyString, TrimmedNonEmptyString),
   ),
   sidebarProjectSortOrder: Schema.optionalKey(SidebarProjectSortOrder),
   sidebarThreadSortOrder: Schema.optionalKey(SidebarThreadSortOrder),

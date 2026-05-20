@@ -36,6 +36,7 @@ const ADDITIONAL_COMMAND_OPTIONS = [
   "workbench.artifacts",
   "workbench.web",
   "workbench.notes",
+  "workspace.files.open",
 ] as const satisfies readonly KeybindingCommand[];
 
 const DEFAULT_WHEN_VARIABLES = new Set<string>(CORE_WHEN_VARIABLES);

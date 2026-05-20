@@ -9,7 +9,7 @@ import { scopeThreadRef } from "@t3tools/client-runtime";
 import { memo } from "react";
 import GitActionsControl from "../GitActionsControl";
 import { type DraftId } from "~/composerDraftStore";
-import { EyeIcon, TerminalSquareIcon } from "lucide-react";
+import { TerminalSquareIcon } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
@@ -17,6 +17,8 @@ import { Toggle } from "../ui/toggle";
 import { SidebarTrigger, useSidebar } from "../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
 import { usePrimaryEnvironmentId } from "../../environments/primary";
+import { isElectron } from "../../env";
+import { cn } from "../../lib/utils";
 
 interface ChatHeaderProps {
   activeThreadEnvironmentId: EnvironmentId;
@@ -85,7 +87,12 @@ export const ChatHeader = memo(function ChatHeader({
   });
 
   return (
-    <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
+    <div
+      className={cn(
+        "@container/header-actions flex min-w-0 flex-1 items-center gap-2",
+        isElectron && showSidebarTrigger && !isMobile && "pl-[74px]",
+      )}
+    >
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
         {showSidebarTrigger ? <SidebarTrigger className="size-7 shrink-0" /> : null}
         <h2
@@ -102,15 +109,6 @@ export const ChatHeader = memo(function ChatHeader({
         {activeProjectName && !isGitRepo && (
           <Badge variant="outline" className="shrink-0 text-[10px] text-amber-700">
             No Git
-          </Badge>
-        )}
-        {activeProjectName && (
-          <Badge
-            variant="secondary"
-            className="hidden min-w-0 shrink overflow-hidden lg:inline-flex"
-          >
-            <EyeIcon className="size-3 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 truncate">Atelier sees {activeProjectName}</span>
           </Badge>
         )}
       </div>

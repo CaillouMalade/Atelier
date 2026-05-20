@@ -550,6 +550,14 @@ function ChatMarkdown({
       li({ node: _node, children, ...props }) {
         return <li {...props}>{renderSkillInlineMarkdownChildren(children, skills)}</li>;
       },
+      hr({ node: _node, ...props }) {
+        return (
+          <hr
+            {...props}
+            className={cn("my-6 border-0 border-t border-border/70", props.className)}
+          />
+        );
+      },
       a({ node: _node, href, ...props }) {
         const normalizedHref = href ? normalizeMarkdownLinkHrefKey(href) : "";
         const fileLinkMeta = normalizedHref ? markdownFileLinkMetaByHref.get(normalizedHref) : null;
@@ -613,7 +621,7 @@ function ChatMarkdown({
   );
 
   return (
-    <div className="chat-markdown w-full min-w-0 text-sm leading-relaxed text-foreground/80">
+    <div className="chat-markdown w-full min-w-0 text-sm leading-relaxed text-foreground/80 [font-family:var(--atelier-chat-font,inherit)]">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={markdownComponents}

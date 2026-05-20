@@ -2,15 +2,20 @@ import {
   ArchiveIcon,
   ArrowUpDownIcon,
   BookOpenIcon,
+  BoxIcon,
   Code2Icon,
   ChevronRightIcon,
   CloudIcon,
+  DatabaseIcon,
   FolderIcon,
   FolderOpenIcon,
   FolderPlusIcon,
   GlobeIcon,
+  LayersIcon,
   PaletteIcon,
+  PenToolIcon,
   PinIcon,
+  RocketIcon,
   SearchIcon,
   ServerIcon,
   SettingsIcon,
@@ -18,6 +23,7 @@ import {
   SparklesIcon,
   TerminalIcon,
   TriangleAlertIcon,
+  WrenchIcon,
 } from "lucide-react";
 import {
   ChangeRequestStatusIcon,
@@ -65,6 +71,7 @@ import { Link, useLocation, useNavigate, useParams, useRouter } from "@tanstack/
 import {
   MAX_SIDEBAR_THREAD_PREVIEW_COUNT,
   MIN_SIDEBAR_THREAD_PREVIEW_COUNT,
+  type SidebarProjectUiGroup,
   type SidebarProjectSortOrder,
   type SidebarThreadPreviewCount,
   type SidebarThreadSortOrder,
@@ -230,6 +237,7 @@ const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> =
   repository_path: "Group by repository path",
   separate: "Keep separate",
 };
+const UNGROUPED_PROJECT_GROUP_ID = "__atelier_ungrouped_projects__";
 const PROJECT_APPEARANCE_ICONS = [
   { value: "folder", label: "Folder", Icon: FolderIcon },
   { value: "code", label: "Code", Icon: Code2Icon },
@@ -237,6 +245,12 @@ const PROJECT_APPEARANCE_ICONS = [
   { value: "book", label: "Notes", Icon: BookOpenIcon },
   { value: "sparkles", label: "Creative", Icon: SparklesIcon },
   { value: "globe", label: "Web", Icon: GlobeIcon },
+  { value: "database", label: "Data", Icon: DatabaseIcon },
+  { value: "layers", label: "Layers", Icon: LayersIcon },
+  { value: "box", label: "Package", Icon: BoxIcon },
+  { value: "wrench", label: "Tools", Icon: WrenchIcon },
+  { value: "rocket", label: "Launch", Icon: RocketIcon },
+  { value: "pen", label: "Writing", Icon: PenToolIcon },
 ] as const satisfies ReadonlyArray<{
   value: ProjectAppearanceIcon;
   label: string;
@@ -249,6 +263,12 @@ const PROJECT_APPEARANCE_COLORS = [
   { value: "violet", label: "Violet", color: "#7c3aed", background: "#7c3aed1a" },
   { value: "amber", label: "Amber", color: "#d97706", background: "#d977061a" },
   { value: "rose", label: "Rose", color: "#e11d48", background: "#e11d481a" },
+  { value: "teal", label: "Teal", color: "#0d9488", background: "#0d94881a" },
+  { value: "cyan", label: "Cyan", color: "#0891b2", background: "#0891b21a" },
+  { value: "fuchsia", label: "Fuchsia", color: "#c026d3", background: "#c026d31a" },
+  { value: "lime", label: "Lime", color: "#65a30d", background: "#65a30d1a" },
+  { value: "orange", label: "Orange", color: "#ea580c", background: "#ea580c1a" },
+  { value: "zinc", label: "Zinc", color: "#52525b", background: "#52525b1a" },
 ] as const satisfies ReadonlyArray<{
   value: ProjectAppearanceColor;
   label: string;
@@ -289,7 +309,7 @@ function projectGroupingModeDescription(mode: SidebarProjectGroupingMode): strin
   }
 }
 
-function getProjectAppearanceIcon(icon: ProjectAppearanceIcon): (typeof FolderIcon) {
+function getProjectAppearanceIcon(icon: ProjectAppearanceIcon): typeof FolderIcon {
   return PROJECT_APPEARANCE_ICONS.find((option) => option.value === icon)?.Icon ?? FolderIcon;
 }
 
@@ -298,6 +318,40 @@ function getProjectAppearanceColor(color: ProjectAppearanceColor) {
     PROJECT_APPEARANCE_COLORS.find((option) => option.value === color) ??
     PROJECT_APPEARANCE_COLORS[0]
   );
+}
+
+function projectUiGroupIdForProject(
+  project: SidebarProjectSnapshot,
+  assignments: Readonly<Record<string, string>>,
+): string | null {
+  for (const member of project.memberProjects) {
+    const groupId = assignments[member.physicalProjectKey]?.trim();
+    if (groupId) {
+      return groupId;
+    }
+  }
+  return null;
+}
+
+function sanitizeProjectUiGroups(
+  groups: readonly SidebarProjectUiGroup[],
+): SidebarProjectUiGroup[] {
+  const seen = new Set<string>();
+  const sanitized: SidebarProjectUiGroup[] = [];
+  for (const group of groups) {
+    const id = group.id.trim();
+    const name = group.name.trim();
+    if (!id || !name || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    sanitized.push({ id, name });
+  }
+  return sanitized;
+}
+
+function sanitizeProjectUiGroupName(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
 }
 
 function ProjectAppearanceMark({
@@ -313,6 +367,10 @@ function ProjectAppearanceMark({
     return <ProjectFavicon environmentId={environmentId} cwd={cwd} />;
   }
 
+  return <ProjectAppearanceIconMark appearance={appearance} />;
+}
+
+function ProjectAppearanceIconMark({ appearance }: { appearance: ProjectAppearance }) {
   const Icon = getProjectAppearanceIcon(appearance.icon);
   const color = getProjectAppearanceColor(appearance.color);
   return (
@@ -1022,6 +1080,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     (settings) => settings.defaultThreadEnvMode,
   );
   const projectGroupingSettings = useSettings(selectProjectGroupingSettings);
+  const projectUiGroups = useSettings((settings) => settings.sidebarProjectUiGroups);
+  const projectUiGroupAssignments = useSettings(
+    (settings) => settings.sidebarProjectUiGroupAssignments,
+  );
   const { updateSettings } = useUpdateSettings();
   const sidebarThreadPreviewCount = useSettings<SidebarThreadPreviewCount>(
     (settings) => settings.sidebarThreadPreviewCount,
@@ -1535,6 +1597,21 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     [memberThreadCountByPhysicalKey, removeProject],
   );
 
+  const assignProjectToUiGroup = useCallback(
+    (groupId: string | null) => {
+      const nextAssignments = { ...projectUiGroupAssignments };
+      for (const member of project.memberProjects) {
+        if (groupId) {
+          nextAssignments[member.physicalProjectKey] = groupId;
+        } else {
+          delete nextAssignments[member.physicalProjectKey];
+        }
+      }
+      updateSettings({ sidebarProjectUiGroupAssignments: nextAssignments });
+    },
+    [project.memberProjects, projectUiGroupAssignments, updateSettings],
+  );
+
   const handleProjectButtonContextMenu = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
@@ -1615,6 +1692,21 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               label: isProjectPinned ? "Unpin project" : "Pin project",
             },
             { id: "appearance", label: "Customize appearance…" },
+            ...(projectUiGroups.length > 0
+              ? [
+                  {
+                    id: "move-to-group",
+                    label: "Move to group",
+                    children: [
+                      ...sanitizeProjectUiGroups(projectUiGroups).map((group) => ({
+                        id: `ui-group:${group.id}`,
+                        label: group.name,
+                      })),
+                      { id: "ui-group:none", label: "No group" },
+                    ],
+                  } satisfies ContextMenuItem<string>,
+                ]
+              : []),
             buildTargetedItem("rename", "Rename project"),
             buildTargetedItem("grouping", "Project grouping…"),
             buildTargetedItem("copy-path", "Copy Project Path"),
@@ -1642,10 +1734,17 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           return;
         }
 
+        if (clicked.startsWith("ui-group:")) {
+          const groupId = clicked.slice("ui-group:".length);
+          assignProjectToUiGroup(groupId === "none" ? null : groupId);
+          return;
+        }
+
         await actionHandlers.get(clicked)?.();
       })();
     },
     [
+      assignProjectToUiGroup,
       copyPathToClipboard,
       handleRemoveProject,
       isProjectPinned,
@@ -1655,6 +1754,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       project.groupedProjectCount,
       project.projectKey,
       project.memberProjects,
+      projectUiGroups,
       setProjectPinned,
       suppressProjectClickForContextMenuRef,
     ],
@@ -2747,6 +2847,8 @@ interface SidebarProjectsContentProps {
   projectSortOrder: SidebarProjectSortOrder;
   threadSortOrder: SidebarThreadSortOrder;
   projectGroupingMode: SidebarProjectGroupingMode;
+  projectUiGroups: readonly SidebarProjectUiGroup[];
+  projectUiGroupAssignments: Readonly<Record<string, string>>;
   threadPreviewCount: SidebarThreadPreviewCount;
   updateSettings: ReturnType<typeof useUpdateSettings>["updateSettings"];
   openAddProject: () => void;
@@ -2790,6 +2892,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     projectSortOrder,
     threadSortOrder,
     projectGroupingMode,
+    projectUiGroups,
+    projectUiGroupAssignments,
     threadPreviewCount,
     updateSettings,
     openAddProject,
@@ -2844,6 +2948,174 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
       updateSettings({ sidebarThreadPreviewCount: count });
     },
     [updateSettings],
+  );
+  const [projectGroupDialogOpen, setProjectGroupDialogOpen] = useState(false);
+  const [projectGroupName, setProjectGroupName] = useState("");
+  const [projectGroupEditingId, setProjectGroupEditingId] = useState<string | null>(null);
+  const [projectGroupAppearanceTarget, setProjectGroupAppearanceTarget] =
+    useState<SidebarProjectUiGroup | null>(null);
+  const [projectGroupAppearanceDraft, setProjectGroupAppearanceDraft] = useState<ProjectAppearance>(
+    DEFAULT_PROJECT_APPEARANCE,
+  );
+  const animatedProjectGroupRefs = useRef(new WeakSet<HTMLElement>());
+  const attachProjectGroupAutoAnimateRef = useCallback((node: HTMLElement | null) => {
+    if (!node || animatedProjectGroupRefs.current.has(node)) {
+      return;
+    }
+    autoAnimate(node, SIDEBAR_LIST_ANIMATION_OPTIONS);
+    animatedProjectGroupRefs.current.add(node);
+  }, []);
+  const projectGroupExpandedById = useUiStateStore((state) => state.projectGroupExpandedById);
+  const projectGroupAppearanceById = useUiStateStore((state) => state.projectGroupAppearanceById);
+  const toggleProjectGroup = useUiStateStore((state) => state.toggleProjectGroup);
+  const setProjectGroupAppearance = useUiStateStore((state) => state.setProjectGroupAppearance);
+  const groupedProjects = useMemo(() => {
+    const validGroups = sanitizeProjectUiGroups(projectUiGroups);
+    const validGroupIds = new Set(validGroups.map((group) => group.id));
+    const buckets = new Map<string, SidebarProjectSnapshot[]>(
+      validGroups.map((group) => [group.id, []]),
+    );
+    const ungrouped: SidebarProjectSnapshot[] = [];
+
+    for (const project of sortedProjects) {
+      const groupId = projectUiGroupIdForProject(project, projectUiGroupAssignments);
+      if (groupId && validGroupIds.has(groupId)) {
+        buckets.get(groupId)?.push(project);
+      } else {
+        ungrouped.push(project);
+      }
+    }
+
+    return [
+      ...validGroups.flatMap((group) => {
+        const projects = buckets.get(group.id) ?? [];
+        return projects.length > 0 ? [{ id: group.id, name: group.name, projects }] : [];
+      }),
+      { id: UNGROUPED_PROJECT_GROUP_ID, name: "Projects", projects: ungrouped },
+    ].filter((group) => group.projects.length > 0);
+  }, [projectUiGroupAssignments, projectUiGroups, sortedProjects]);
+  const closeProjectGroupDialog = useCallback(() => {
+    setProjectGroupDialogOpen(false);
+    setProjectGroupName("");
+    setProjectGroupEditingId(null);
+  }, []);
+  const saveProjectGroup = useCallback(() => {
+    const name = sanitizeProjectUiGroupName(projectGroupName);
+    if (!name) {
+      return;
+    }
+    if (projectGroupEditingId) {
+      updateSettings({
+        sidebarProjectUiGroups: sanitizeProjectUiGroups(projectUiGroups).map((group) =>
+          group.id === projectGroupEditingId ? { ...group, name } : group,
+        ),
+      });
+      closeProjectGroupDialog();
+      return;
+    }
+    updateSettings({
+      sidebarProjectUiGroups: [
+        ...sanitizeProjectUiGroups(projectUiGroups),
+        { id: `project-group-${newCommandId()}`, name },
+      ],
+    });
+    closeProjectGroupDialog();
+  }, [
+    closeProjectGroupDialog,
+    projectGroupEditingId,
+    projectGroupName,
+    projectUiGroups,
+    updateSettings,
+  ]);
+  const openCreateProjectGroupDialog = useCallback(() => {
+    setProjectGroupName("");
+    setProjectGroupEditingId(null);
+    setProjectGroupDialogOpen(true);
+  }, []);
+  const openRenameProjectGroupDialog = useCallback((group: SidebarProjectUiGroup) => {
+    setProjectGroupName(group.name);
+    setProjectGroupEditingId(group.id);
+    setProjectGroupDialogOpen(true);
+  }, []);
+  const openProjectGroupAppearanceDialog = useCallback(
+    (group: SidebarProjectUiGroup) => {
+      setProjectGroupAppearanceTarget(group);
+      setProjectGroupAppearanceDraft(
+        projectGroupAppearanceById[group.id] ?? DEFAULT_PROJECT_APPEARANCE,
+      );
+    },
+    [projectGroupAppearanceById],
+  );
+  const closeProjectGroupAppearanceDialog = useCallback(() => {
+    setProjectGroupAppearanceTarget(null);
+    setProjectGroupAppearanceDraft(DEFAULT_PROJECT_APPEARANCE);
+  }, []);
+  const saveProjectGroupAppearance = useCallback(() => {
+    if (!projectGroupAppearanceTarget) {
+      return;
+    }
+    setProjectGroupAppearance(projectGroupAppearanceTarget.id, projectGroupAppearanceDraft);
+    closeProjectGroupAppearanceDialog();
+  }, [
+    closeProjectGroupAppearanceDialog,
+    projectGroupAppearanceDraft,
+    projectGroupAppearanceTarget,
+    setProjectGroupAppearance,
+  ]);
+  const deleteProjectGroup = useCallback(
+    (groupId: string) => {
+      const nextAssignments = Object.fromEntries(
+        Object.entries(projectUiGroupAssignments).filter(([, assignedGroupId]) => {
+          return assignedGroupId !== groupId;
+        }),
+      );
+      updateSettings({
+        sidebarProjectUiGroups: sanitizeProjectUiGroups(projectUiGroups).filter(
+          (group) => group.id !== groupId,
+        ),
+        sidebarProjectUiGroupAssignments: nextAssignments,
+      });
+    },
+    [projectUiGroupAssignments, projectUiGroups, updateSettings],
+  );
+  const handleProjectGroupContextMenu = useCallback(
+    (event: React.MouseEvent<HTMLElement>, group: SidebarProjectUiGroup) => {
+      event.preventDefault();
+      void (async () => {
+        const api = readLocalApi();
+        if (!api) return;
+        const clicked = await api.contextMenu.show(
+          [
+            { id: "toggle", label: "Collapse / expand group" },
+            { id: "appearance", label: "Customize appearance…" },
+            { id: "rename", label: "Rename group" },
+            { id: "delete", label: "Delete group", destructive: true },
+          ],
+          { x: event.clientX, y: event.clientY },
+        );
+        if (clicked === "rename") {
+          openRenameProjectGroupDialog(group);
+          return;
+        }
+        if (clicked === "toggle") {
+          toggleProjectGroup(group.id);
+          return;
+        }
+        if (clicked === "appearance") {
+          openProjectGroupAppearanceDialog(group);
+          return;
+        }
+        if (clicked === "delete") {
+          deleteProjectGroup(group.id);
+        }
+      })();
+    },
+    [
+      deleteProjectGroup,
+      openProjectGroupAppearanceDialog,
+      openRenameProjectGroupDialog,
+      toggleProjectGroup,
+    ],
   );
 
   return (
@@ -2938,6 +3210,21 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 render={
                   <button
                     type="button"
+                    aria-label="Create project group"
+                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                    onClick={openCreateProjectGroupDialog}
+                  />
+                }
+              >
+                <FolderIcon className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipPopup side="right">Create project group</TooltipPopup>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
                     aria-label="Add project"
                     data-testid="sidebar-add-project-trigger"
                     className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
@@ -2966,61 +3253,134 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 items={sortedProjects.map((project) => project.projectKey)}
                 strategy={verticalListSortingStrategy}
               >
-                {sortedProjects.map((project) => (
-                  <SortableProjectItem key={project.projectKey} projectId={project.projectKey}>
-                    {(dragHandleProps) => (
-                      <SidebarProjectItem
-                        project={project}
-                        isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
-                        activeRouteThreadKey={
-                          activeRouteProjectKey === project.projectKey ? routeThreadKey : null
-                        }
-                        newThreadShortcutLabel={newThreadShortcutLabel}
-                        handleNewThread={handleNewThread}
-                        archiveThread={archiveThread}
-                        deleteThread={deleteThread}
-                        threadJumpLabelByKey={threadJumpLabelByKey}
-                        attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                        expandThreadListForProject={expandThreadListForProject}
-                        collapseThreadListForProject={collapseThreadListForProject}
-                        dragInProgressRef={dragInProgressRef}
-                        suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
-                        suppressProjectClickForContextMenuRef={
-                          suppressProjectClickForContextMenuRef
-                        }
-                        isManualProjectSorting={isManualProjectSorting}
-                        dragHandleProps={dragHandleProps}
-                      />
-                    )}
-                  </SortableProjectItem>
-                ))}
+                {groupedProjects.flatMap((group) =>
+                  group.projects.map((project) => (
+                    <SortableProjectItem key={project.projectKey} projectId={project.projectKey}>
+                      {(dragHandleProps) => (
+                        <SidebarProjectItem
+                          project={project}
+                          isThreadListExpanded={expandedThreadListsByProject.has(
+                            project.projectKey,
+                          )}
+                          activeRouteThreadKey={
+                            activeRouteProjectKey === project.projectKey ? routeThreadKey : null
+                          }
+                          newThreadShortcutLabel={newThreadShortcutLabel}
+                          handleNewThread={handleNewThread}
+                          archiveThread={archiveThread}
+                          deleteThread={deleteThread}
+                          threadJumpLabelByKey={threadJumpLabelByKey}
+                          attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                          expandThreadListForProject={expandThreadListForProject}
+                          collapseThreadListForProject={collapseThreadListForProject}
+                          dragInProgressRef={dragInProgressRef}
+                          suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                          suppressProjectClickForContextMenuRef={
+                            suppressProjectClickForContextMenuRef
+                          }
+                          isManualProjectSorting={isManualProjectSorting}
+                          dragHandleProps={dragHandleProps}
+                        />
+                      )}
+                    </SortableProjectItem>
+                  )),
+                )}
               </SortableContext>
             </SidebarMenu>
           </DndContext>
         ) : (
           <SidebarMenu ref={attachProjectListAutoAnimateRef}>
-            {sortedProjects.map((project) => (
-              <SidebarProjectListRow
-                key={project.projectKey}
-                project={project}
-                isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
-                activeRouteThreadKey={
-                  activeRouteProjectKey === project.projectKey ? routeThreadKey : null
-                }
-                newThreadShortcutLabel={newThreadShortcutLabel}
-                handleNewThread={handleNewThread}
-                archiveThread={archiveThread}
-                deleteThread={deleteThread}
-                threadJumpLabelByKey={threadJumpLabelByKey}
-                attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                expandThreadListForProject={expandThreadListForProject}
-                collapseThreadListForProject={collapseThreadListForProject}
-                dragInProgressRef={dragInProgressRef}
-                suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
-                suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
-                isManualProjectSorting={isManualProjectSorting}
-                dragHandleProps={null}
-              />
+            {groupedProjects.map((group) => (
+              <React.Fragment key={group.id}>
+                {group.id === UNGROUPED_PROJECT_GROUP_ID ? (
+                  group.projects.map((project) => (
+                    <SidebarProjectListRow
+                      key={project.projectKey}
+                      project={project}
+                      isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
+                      activeRouteThreadKey={
+                        activeRouteProjectKey === project.projectKey ? routeThreadKey : null
+                      }
+                      newThreadShortcutLabel={newThreadShortcutLabel}
+                      handleNewThread={handleNewThread}
+                      archiveThread={archiveThread}
+                      deleteThread={deleteThread}
+                      threadJumpLabelByKey={threadJumpLabelByKey}
+                      attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                      expandThreadListForProject={expandThreadListForProject}
+                      collapseThreadListForProject={collapseThreadListForProject}
+                      dragInProgressRef={dragInProgressRef}
+                      suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                      suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
+                      isManualProjectSorting={isManualProjectSorting}
+                      dragHandleProps={null}
+                    />
+                  ))
+                ) : (
+                  <div
+                    ref={attachProjectGroupAutoAnimateRef}
+                    className="mb-1.5 rounded-lg border border-border/55 bg-muted/30 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)]"
+                  >
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex h-7 w-full items-center gap-1.5 rounded-md px-1.5 text-left text-xs font-semibold text-foreground/85 transition-colors hover:bg-accent/70 hover:text-foreground",
+                        (projectGroupExpandedById[group.id] ?? true) && "mb-1",
+                      )}
+                      aria-expanded={projectGroupExpandedById[group.id] ?? true}
+                      onClick={() => toggleProjectGroup(group.id)}
+                      onContextMenu={(event) => handleProjectGroupContextMenu(event, group)}
+                    >
+                      <ChevronRightIcon
+                        className={cn(
+                          "-ml-0.5 size-3 shrink-0 transition-transform duration-150",
+                          (projectGroupExpandedById[group.id] ?? true) && "rotate-90",
+                        )}
+                      />
+                      <ProjectAppearanceIconMark
+                        appearance={
+                          projectGroupAppearanceById[group.id] ?? DEFAULT_PROJECT_APPEARANCE
+                        }
+                      />
+                      <span className="min-w-0 flex-1 truncate">{group.name}</span>
+                      <span className="rounded-full bg-background/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/70">
+                        {group.projects.length}
+                      </span>
+                    </button>
+                    {(projectGroupExpandedById[group.id] ?? true) ? (
+                      <div className="ml-2 space-y-1 border-l border-border/55 pl-1.5">
+                        {group.projects.map((project) => (
+                          <SidebarProjectListRow
+                            key={project.projectKey}
+                            project={project}
+                            isThreadListExpanded={expandedThreadListsByProject.has(
+                              project.projectKey,
+                            )}
+                            activeRouteThreadKey={
+                              activeRouteProjectKey === project.projectKey ? routeThreadKey : null
+                            }
+                            newThreadShortcutLabel={newThreadShortcutLabel}
+                            handleNewThread={handleNewThread}
+                            archiveThread={archiveThread}
+                            deleteThread={deleteThread}
+                            threadJumpLabelByKey={threadJumpLabelByKey}
+                            attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                            expandThreadListForProject={expandThreadListForProject}
+                            collapseThreadListForProject={collapseThreadListForProject}
+                            dragInProgressRef={dragInProgressRef}
+                            suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                            suppressProjectClickForContextMenuRef={
+                              suppressProjectClickForContextMenuRef
+                            }
+                            isManualProjectSorting={isManualProjectSorting}
+                            dragHandleProps={null}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </React.Fragment>
             ))}
           </SidebarMenu>
         )}
@@ -3031,6 +3391,129 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
           </div>
         )}
       </SidebarGroup>
+      <Dialog
+        open={projectGroupDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) closeProjectGroupDialog();
+        }}
+      >
+        <DialogPopup className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {projectGroupEditingId ? "Rename project group" : "Create project group"}
+            </DialogTitle>
+          </DialogHeader>
+          <DialogPanel>
+            <Input
+              aria-label="Project group name"
+              placeholder="Group name"
+              value={projectGroupName}
+              onChange={(event) => setProjectGroupName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  saveProjectGroup();
+                }
+              }}
+            />
+          </DialogPanel>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeProjectGroupDialog}>
+              Cancel
+            </Button>
+            <Button onClick={saveProjectGroup}>{projectGroupEditingId ? "Save" : "Create"}</Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+      <Dialog
+        open={projectGroupAppearanceTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) closeProjectGroupAppearanceDialog();
+        }}
+      >
+        <DialogPopup className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PaletteIcon className="size-4" />
+              Group appearance
+            </DialogTitle>
+            <DialogDescription>
+              Customize the sidebar marker for {projectGroupAppearanceTarget?.name ?? "this group"}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogPanel className="space-y-5">
+            <div className="grid gap-2">
+              <span className="text-xs font-medium text-foreground">Icon</span>
+              <div className="grid grid-cols-3 gap-2">
+                {PROJECT_APPEARANCE_ICONS.map((option) => {
+                  const selected = projectGroupAppearanceDraft.icon === option.value;
+                  const Icon = option.Icon;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cn(
+                        "flex h-9 items-center gap-2 rounded-md border px-2 text-left text-xs transition-colors",
+                        selected
+                          ? "border-primary/45 bg-primary/10 text-foreground"
+                          : "border-border/60 bg-background hover:bg-accent/70",
+                      )}
+                      onClick={() =>
+                        setProjectGroupAppearanceDraft((current) => ({
+                          ...current,
+                          icon: option.value,
+                        }))
+                      }
+                    >
+                      <Icon className="size-3.5 shrink-0" />
+                      <span className="truncate">{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <span className="text-xs font-medium text-foreground">Color</span>
+              <div className="grid grid-cols-3 gap-2">
+                {PROJECT_APPEARANCE_COLORS.map((option) => {
+                  const selected = projectGroupAppearanceDraft.color === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cn(
+                        "flex h-9 items-center gap-2 rounded-md border px-2 text-left text-xs transition-colors",
+                        selected
+                          ? "border-primary/45 bg-primary/10 text-foreground"
+                          : "border-border/60 bg-background hover:bg-accent/70",
+                      )}
+                      onClick={() =>
+                        setProjectGroupAppearanceDraft((current) => ({
+                          ...current,
+                          color: option.value,
+                        }))
+                      }
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: option.color }}
+                      />
+                      <span className="truncate">{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </DialogPanel>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeProjectGroupAppearanceDialog}>
+              Cancel
+            </Button>
+            <Button onClick={saveProjectGroupAppearance}>Save</Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
     </SidebarContent>
   );
 });
@@ -3050,6 +3533,8 @@ export default function Sidebar() {
   const sidebarThreadSortOrder = useSettings((s) => s.sidebarThreadSortOrder);
   const sidebarProjectSortOrder = useSettings((s) => s.sidebarProjectSortOrder);
   const sidebarProjectGroupingMode = useSettings((s) => s.sidebarProjectGroupingMode);
+  const sidebarProjectUiGroups = useSettings((s) => s.sidebarProjectUiGroups);
+  const sidebarProjectUiGroupAssignments = useSettings((s) => s.sidebarProjectUiGroupAssignments);
   const projectGroupingSettings = useSettings(selectProjectGroupingSettings);
   const sidebarThreadPreviewCount = useSettings((s) => s.sidebarThreadPreviewCount);
   const { updateSettings } = useUpdateSettings();
@@ -3703,6 +4188,8 @@ export default function Sidebar() {
             projectSortOrder={sidebarProjectSortOrder}
             threadSortOrder={sidebarThreadSortOrder}
             projectGroupingMode={sidebarProjectGroupingMode}
+            projectUiGroups={sidebarProjectUiGroups}
+            projectUiGroupAssignments={sidebarProjectUiGroupAssignments}
             threadPreviewCount={sidebarThreadPreviewCount}
             updateSettings={updateSettings}
             openAddProject={openAddProjectCommandPalette}
